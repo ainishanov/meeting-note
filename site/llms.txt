@@ -1,0 +1,19 @@
+# Meeting Note
+
+Meeting Note is a free open-source Windows desktop app that records calls,
+transcribes meetings, creates AI summaries, and keeps searchable local history.
+
+Official site: https://ainishanov.github.io/meeting-note/
+Repository: https://github.com/ainishanov/meeting-note
+Latest release: https://github.com/ainishanov/meeting-note/releases/tag/v0.1.2
+Windows download: https://github.com/ainishanov/meeting-note/releases/download/v0.1.2/MeetingNote-v0.1.2-windows-x64.zip
+
+Key facts:
+- Platform: Windows 10 and Windows 11.
+- License: MIT.
+- API keys: users provide their own OpenAI and OpenRouter-compatible keys.
+- Data model: recordings, transcripts, summaries, logs, and SQLite database stay local by default.
+- Exports: TXT, Markdown, and DOCX.
+
+Feature requests:
+https://github.com/ainishanov/meeting-note/issues/new?template=feature_request.yml

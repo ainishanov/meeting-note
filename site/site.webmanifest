@@ -1,0 +1,23 @@
+{
+  "name": "Meeting Note",
+  "short_name": "Meeting Note",
+  "description": "Free Windows meeting recorder with AI transcripts and summaries.",
+  "start_url": "https://ainishanov.github.io/meeting-note/",
+  "scope": "https://ainishanov.github.io/meeting-note/",
+  "display": "browser",
+  "background_color": "#0b0d12",
+  "theme_color": "#10131d",
+  "icons": [
+    {
+      "src": "./assets/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "./assets/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

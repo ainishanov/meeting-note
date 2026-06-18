@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ainishanov.github.io/meeting-note/sitemap.xml

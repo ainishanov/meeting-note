@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Meeting Note - Free Windows Meeting Recorder with AI Transcripts</title>
+    <meta
+      name="description"
+      content="Free open-source Windows app that records calls, transcribes meetings, and creates AI summaries with your own API keys."
+    >
+    <meta name="robots" content="index,follow,max-image-preview:large">
+    <meta name="theme-color" content="#10131d">
+    <link rel="canonical" href="https://ainishanov.github.io/meeting-note/">
+    <link rel="icon" href="./favicon.ico" sizes="any">
+    <link rel="icon" href="./assets/app-icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="./assets/app-icon-512.png">
+    <link rel="manifest" href="./site.webmanifest">
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Meeting Note">
+    <meta property="og:title" content="Free Meeting Notes for Windows">
+    <meta
+      property="og:description"
+      content="Record calls, get transcripts, and leave every meeting with searchable AI notes."
+    >
+    <meta property="og:url" content="https://ainishanov.github.io/meeting-note/">
+    <meta property="og:image" content="https://ainishanov.github.io/meeting-note/assets/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Meeting Note desktop app with the text Free Meeting Notes for Windows">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Free Meeting Notes for Windows">
+    <meta
+      name="twitter:description"
+      content="Record calls, get transcripts, and leave every meeting with searchable AI notes."
+    >
+    <meta name="twitter:image" content="https://ainishanov.github.io/meeting-note/assets/og-image.png">
+
+    <link rel="stylesheet" href="./styles.css">
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Meeting Note",
+        "applicationCategory": "ProductivityApplication",
+        "operatingSystem": "Windows 10, Windows 11",
+        "softwareVersion": "0.1.2",
+        "description": "Free open-source Windows app that records calls, transcribes meetings, and creates AI summaries with your own API keys.",
+        "url": "https://ainishanov.github.io/meeting-note/",
+        "downloadUrl": "https://github.com/ainishanov/meeting-note/releases/download/v0.1.2/MeetingNote-v0.1.2-windows-x64.zip",
+        "codeRepository": "https://github.com/ainishanov/meeting-note",
+        "license": "https://github.com/ainishanov/meeting-note/blob/main/LICENSE",
+        "image": "https://ainishanov.github.io/meeting-note/assets/og-image.png",
+        "screenshot": "https://ainishanov.github.io/meeting-note/assets/hero-app.png",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "author": {
+          "@type": "Person",
+          "name": "Ainur Nishanov",
+          "url": "https://github.com/ainishanov"
+        }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Is Meeting Note free?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Meeting Note is free open-source software. You bring your own OpenAI and OpenRouter API keys for transcription and summaries."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does Meeting Note work on Windows?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Meeting Note is built for Windows 10 and Windows 11."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Where can I request features?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Feature requests are tracked in GitHub Issues so users can discuss and vote on improvements."
+            }
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <header class="site-header" aria-label="Site navigation">
+      <a class="brand" href="#top" aria-label="Meeting Note home">
+        <img src="./assets/app-icon.svg" width="32" height="32" alt="">
+        <span>Meeting Note</span>
+      </a>
+      <nav class="nav-links" aria-label="Main navigation">
+        <a href="#features">Features</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#roadmap">Roadmap</a>
+        <a href="https://github.com/ainishanov/meeting-note">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">Open-source desktop notes</p>
+          <h1 id="hero-title">Free Meeting Notes for Windows</h1>
+          <p class="hero-lede">
+            Record calls, get transcripts, and leave every meeting with searchable AI notes.
+          </p>
+          <div class="hero-actions" aria-label="Primary actions">
+            <a
+              class="button button-primary"
+              href="https://github.com/ainishanov/meeting-note/releases/download/v0.1.2/MeetingNote-v0.1.2-windows-x64.zip"
+            >Download for Windows</a>
+            <a
+              class="button button-secondary"
+              href="https://github.com/ainishanov/meeting-note/issues/new?template=feature_request.yml"
+            >Request a Feature</a>
+          </div>
+          <dl class="trust-strip" aria-label="Project facts">
+            <div>
+              <dt>License</dt>
+              <dd>MIT</dd>
+            </div>
+            <div>
+              <dt>Version</dt>
+              <dd>0.1.2</dd>
+            </div>
+            <div>
+              <dt>Platform</dt>
+              <dd>Windows</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="outcome-band" aria-label="Core outcome">
+        <div class="section-inner outcome-grid">
+          <p>Turn every call into a searchable record.</p>
+          <p>No SaaS dashboard. No lost decisions. Your meeting history stays on your machine.</p>
+        </div>
+      </section>
+
+      <section class="section" id="features" aria-labelledby="features-title">
+        <div class="section-inner">
+          <p class="eyebrow">What it gives you</p>
+          <h2 id="features-title">Stop writing notes during calls.</h2>
+          <div class="feature-grid">
+            <article class="feature-card">
+              <span>01</span>
+              <h3>Record system audio</h3>
+              <p>Capture meeting sound through Windows WASAPI loopback, with optional microphone mixing.</p>
+            </article>
+            <article class="feature-card">
+              <span>02</span>
+              <h3>Get a transcript</h3>
+              <p>Send audio to OpenAI speech-to-text and keep the result in local searchable history.</p>
+            </article>
+            <article class="feature-card">
+              <span>03</span>
+              <h3>Export clean notes</h3>
+              <p>Create TXT, Markdown, and DOCX files you can share after the call.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section split-section" id="privacy" aria-labelledby="privacy-title">
+        <div class="section-inner split-grid">
+          <div>
+            <p class="eyebrow">Local-first workflow</p>
+            <h2 id="privacy-title">Your meetings stay on your computer.</h2>
+          </div>
+          <div class="copy-stack">
+            <p>
+              Meeting Note stores recordings, transcripts, summaries, logs, and its SQLite database locally
+              under the app data folder.
+            </p>
+            <p>
+              You control the API keys. The app uses your OpenAI key for transcription and your
+              OpenRouter-compatible key for summaries.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="roadmap" aria-labelledby="roadmap-title">
+        <div class="section-inner roadmap">
+          <p class="eyebrow">Open development</p>
+          <h2 id="roadmap-title">Ask for the feature you need next.</h2>
+          <p>
+            Bugs, hardware reports, and feature requests live in GitHub Issues. Clear requests help shape
+            the roadmap and make the app better for real meeting workflows.
+          </p>
+          <div class="hero-actions">
+            <a
+              class="button button-primary"
+              href="https://github.com/ainishanov/meeting-note/issues/new?template=feature_request.yml"
+            >Request a Feature</a>
+            <a class="button button-secondary" href="https://github.com/ainishanov/meeting-note/issues">View Issues</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section faq-section" aria-labelledby="faq-title">
+        <div class="section-inner">
+          <p class="eyebrow">Questions</p>
+          <h2 id="faq-title">Know this before you install.</h2>
+          <div class="faq-list">
+            <details>
+              <summary>Is Meeting Note free?</summary>
+              <p>Yes. The app is free and open source. API usage is billed by the providers you connect.</p>
+            </details>
+            <details>
+              <summary>Which operating system is supported?</summary>
+              <p>Meeting Note is built for Windows 10 and Windows 11.</p>
+            </details>
+            <details>
+              <summary>Can I suggest improvements?</summary>
+              <p>Yes. Use GitHub Issues to request features, report hardware problems, or discuss workflow gaps.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="section-inner footer-grid">
+        <div>
+          <a class="brand" href="#top" aria-label="Meeting Note home">
+            <img src="./assets/app-icon.svg" width="28" height="28" alt="">
+            <span>Meeting Note</span>
+          </a>
+          <p>Records and summarizes calls.</p>
+        </div>
+        <nav aria-label="Footer links">
+          <a href="https://github.com/ainishanov/meeting-note/releases/tag/v0.1.2">Latest Release</a>
+          <a href="https://github.com/ainishanov/meeting-note">Source Code</a>
+          <a href="https://github.com/ainishanov/meeting-note/blob/main/SECURITY.md">Security</a>
+          <a href="./sitemap.xml">Sitemap</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

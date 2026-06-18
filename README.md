@@ -5,6 +5,11 @@ Records and summarizes calls.
 Meeting Note is a Windows desktop app that captures meeting audio, transcribes it,
 generates a summary, and keeps a searchable local history.
 
+Website: https://ainishanov.github.io/meeting-note/
+
+Download for Windows:
+https://github.com/ainishanov/meeting-note/releases/download/v0.1.2/MeetingNote-v0.1.2-windows-x64.zip
+
 ## Project Status
 
 Meeting Note is early public software. The core recording, transcription,
