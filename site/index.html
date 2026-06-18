@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Meeting Note - Free Windows Meeting Recorder with AI Transcripts</title>
+    <title>Free Windows Meeting Recorder with AI Transcripts - Meeting Note</title>
     <meta
       name="description"
       content="Free open-source Windows app that records calls, transcribes meetings, and creates AI summaries with your own API keys."
@@ -98,21 +98,7 @@
         ]
       }
     </script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-    </script>
-    <!-- Yandex.Metrika counter -->
-    <script>
-      (function(m,e,t,r,i,k,a){
-        m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
-        m[i].l=1*new Date();
-        for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
-        k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
-      })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=109960032', 'ym');
-
-      ym(109960032, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
-    </script>
-    <!-- /Yandex.Metrika counter -->
+    <script defer src="./assets/analytics.js"></script>
   </head>
   <body>
     <noscript><div><img src="https://mc.yandex.ru/watch/109960032" style="position:absolute; left:-9999px;" alt=""></div></noscript>
@@ -122,8 +108,9 @@
         <span>Meeting Note</span>
       </a>
       <nav class="nav-links" aria-label="Main navigation">
-        <a href="#features">Features</a>
-        <a href="#privacy">Privacy</a>
+        <a href="./download/">Download</a>
+        <a href="./install/">Install</a>
+        <a href="./privacy/">Privacy</a>
         <a href="#roadmap">Roadmap</a>
         <a href="https://github.com/ainishanov/meeting-note" data-goal="github_repo">GitHub</a>
       </nav>
@@ -193,6 +180,39 @@
               <h3>Export clean notes</h3>
               <p>Create TXT, Markdown, and DOCX files you can share after the call.</p>
             </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section split-section" id="use-cases" aria-labelledby="use-cases-title">
+        <div class="section-inner">
+          <p class="eyebrow">Use cases</p>
+          <h2 id="use-cases-title">Choose the job you need done.</h2>
+          <div class="link-grid">
+            <a class="link-panel" href="./windows-meeting-recorder/">
+              <strong>Free Windows meeting recorder</strong>
+              <span>Record meeting audio on Windows and keep the history local.</span>
+            </a>
+            <a class="link-panel" href="./meeting-transcription-app/">
+              <strong>Meeting transcription app</strong>
+              <span>Turn call recordings into searchable transcripts and summaries.</span>
+            </a>
+            <a class="link-panel" href="./ai-meeting-notes/">
+              <strong>AI meeting notes app</strong>
+              <span>Leave calls with action items, decisions, and clean exports.</span>
+            </a>
+            <a class="link-panel" href="./download/">
+              <strong>Download meeting recorder for Windows</strong>
+              <span>Get the latest free Windows ZIP from GitHub Releases.</span>
+            </a>
+            <a class="link-panel" href="./install/">
+              <strong>Install meeting transcription on Windows</strong>
+              <span>Set up the app, add API keys, and start a test recording.</span>
+            </a>
+            <a class="link-panel" href="./privacy/">
+              <strong>Private meeting recorder</strong>
+              <span>Understand what stays local and which APIs process audio.</span>
+            </a>
           </div>
         </div>
       </section>
@@ -267,6 +287,9 @@
           <p>Records and summarizes calls.</p>
         </div>
         <nav aria-label="Footer links">
+          <a href="./download/">Download</a>
+          <a href="./install/">Install</a>
+          <a href="./privacy/">Privacy</a>
           <a href="https://github.com/ainishanov/meeting-note/releases/tag/v0.1.2" data-goal="release_page">Latest Release</a>
           <a href="https://github.com/ainishanov/meeting-note" data-goal="github_repo">Source Code</a>
           <a href="https://github.com/ainishanov/meeting-note/blob/main/SECURITY.md" data-goal="security_page">Security</a>
@@ -274,25 +297,5 @@
         </nav>
       </div>
     </footer>
-    <script>
-      (function() {
-        var metrikaId = 109960032;
-        function reachGoal(goal, target) {
-          if (!goal || typeof window.ym !== "function") {
-            return;
-          }
-          window.ym(metrikaId, "reachGoal", goal, {
-            href: target && target.href ? target.href : "",
-            text: target && target.textContent ? target.textContent.trim() : ""
-          });
-        }
-
-        document.querySelectorAll("[data-goal]").forEach(function(link) {
-          link.addEventListener("click", function() {
-            reachGoal(link.getAttribute("data-goal"), link);
-          });
-        });
-      })();
-    </script>
   </body>
 </html>

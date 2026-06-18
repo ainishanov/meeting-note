@@ -8,6 +8,14 @@ Repository: https://github.com/ainishanov/meeting-note
 Latest release: https://github.com/ainishanov/meeting-note/releases/tag/v0.1.2
 Windows download: https://github.com/ainishanov/meeting-note/releases/download/v0.1.2/MeetingNote-v0.1.2-windows-x64.zip
 
+Audience pages:
+- Free Windows meeting recorder: https://ainishanov.github.io/meeting-note/windows-meeting-recorder/
+- Meeting transcription app for Windows: https://ainishanov.github.io/meeting-note/meeting-transcription-app/
+- AI meeting notes app for Windows: https://ainishanov.github.io/meeting-note/ai-meeting-notes/
+- Download page: https://ainishanov.github.io/meeting-note/download/
+- Install guide: https://ainishanov.github.io/meeting-note/install/
+- Privacy page: https://ainishanov.github.io/meeting-note/privacy/
+
 Key facts:
 - Platform: Windows 10 and Windows 11.
 - License: MIT.
