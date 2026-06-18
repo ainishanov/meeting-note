@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Data
+data/
+*.db
+*.db-journal
+*.wav
+*.mp3
+
+# Environment
+.env
+.env.local
+
+# Local agent/tool state
+.claude/
+.codex/
+.codex_tmp*
+
+# Local launchers
+MeetingNote.local.vbs
+*.lnk
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build artifacts
+build/
+dist/
+*.exe
+*.spec
+!MeetingNote.spec
+
+# Temp files
+tmpclaude-*
+temp_*.txt

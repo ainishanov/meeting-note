@@ -1,0 +1,38 @@
+name: Feature request
+description: Suggest an improvement or new workflow.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What pain should this solve?
+      placeholder: I want to record only meetings longer than 5 minutes...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What should Meeting Note do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional. Mention workarounds or related tools.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Recording
+        - Transcription
+        - Summaries
+        - Search and history
+        - Export
+        - Settings
+        - Packaging and install
+        - Other

@@ -1,0 +1,46 @@
+# Meeting Note - Requirements
+# Python 3.11+
+
+# UI Framework
+PyQt6>=6.6.0
+
+# Audio capture and processing (WASAPI loopback for system audio)
+PyAudioWPatch>=0.2.12.6
+numpy>=1.24.0
+scipy>=1.11.0
+
+# OpenAI API (for GPT-4o transcription models)
+openai>=2.32.0
+
+# Summary generation through OpenRouter (uses OpenAI-compatible API)
+
+# Export
+python-docx>=1.1.0
+
+# Configuration
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Logging
+loguru>=0.7.0
+
+# Secure credential storage
+keyring>=24.3.0
+
+# Process monitoring (for auto-trigger)
+psutil>=5.9.0
+
+# Voice Activity Detection (optional - requires C++ Build Tools)
+# Install separately if needed: pip install webrtcvad
+# Or install Visual C++ Build Tools from:
+# https://visualstudio.microsoft.com/visual-cpp-build-tools/
+
+# Audio processing for chunked transcription
+pydub>=0.25.1
+
+# Window title detection
+pywin32>=306
+
+# Global hotkeys
+pynput>=1.7.6
