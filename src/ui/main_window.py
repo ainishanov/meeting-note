@@ -34,6 +34,7 @@ from src.core.recording_titles import (
 from src.ui.history_list import HistoryListWidget
 from src.ui.meeting_notification import MeetingNotificationManager
 from src.ui.recording_widget import RecordingWidget
+from src.ui.resources import get_app_icon
 from src.ui.transcript_view import TranscriptViewWidget
 from src.ui.i18n import tr
 from src.utils.config import get_settings
@@ -363,6 +364,7 @@ class MainWindow(QMainWindow):
         )
 
         self.setWindowTitle("Meeting Note")
+        self.setWindowIcon(get_app_icon())
         self.setMinimumSize(1000, 700)
 
         # Central widget
@@ -438,6 +440,7 @@ class MainWindow(QMainWindow):
         self.status_label = QLabel(tr("Готов к записи"))
         self.status_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 12px;")
         self.status_bar.addWidget(self.status_label)
+        self.status_bar.hide()
 
         # Menu bar
         self._setup_menu()
@@ -734,6 +737,24 @@ class MainWindow(QMainWindow):
         """Resume durable processing jobs left by a prior shutdown."""
         requeued = self.db.requeue_running_processing_jobs()
 
+        stale_recordings = self.db.get_recordings_by_statuses(["recording"])
+        recovered_stale = 0
+        for recording in stale_recordings:
+            if recording.id is None:
+                continue
+            transcript = self.db.get_transcript(recording.id)
+            if transcript and transcript.full_text:
+                self.db.create_processing_job(recording.id, "summary")
+                self.db.update_recording_status(recording.id, "transcribed")
+                recovered_stale += 1
+            else:
+                self.db.update_recording_status(recording.id, "error")
+                self.db.fail_processing_jobs_for_recording(
+                    recording.id,
+                    "Recording was interrupted before it was stopped cleanly",
+                )
+                recovered_stale += 1
+
         legacy_interrupted = self.db.get_recordings_by_statuses(
             ["pending", "transcribing", "summarizing"]
         )
@@ -759,7 +780,7 @@ class MainWindow(QMainWindow):
                 )
 
         active_jobs = self.db.get_active_processing_jobs()
-        if requeued or queued_legacy or active_jobs:
+        if recovered_stale or requeued or queued_legacy or active_jobs:
             self.status_label.setText(
                 tr("Продолжаю очередь обработки: {count} задач", count=len(active_jobs))
             )
@@ -1561,7 +1582,7 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             tr("О программе"),
-            "Meeting Note v0.1.0\n\n"
+            "Meeting Note v0.1.1\n\n"
             + tr("Приложение для записи и транскрибации онлайн-звонков.\n\n")
             + "Uses OpenAI speech-to-text models for transcription\n"
             + "and OpenRouter chat models for meeting summaries.",

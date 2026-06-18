@@ -63,10 +63,12 @@ class MeetingNoteApp:
 
         from PyQt6.QtCore import QTimer
         from PyQt6.QtWidgets import QApplication
+        from src.ui.resources import get_app_icon
 
         # Create Qt application
         self._app = QApplication(sys.argv)
         self._app.setApplicationName("Meeting Note")
+        self._app.setWindowIcon(get_app_icon())
         self._app.setQuitOnLastWindowClosed(True)  # Close app when window is closed
 
         if self._notify_existing_instance():

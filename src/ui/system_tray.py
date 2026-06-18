@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QMenu, QSystemTrayIcon, QApplication
 
 from loguru import logger
 from src.ui.i18n import tr
+from src.ui.resources import get_app_icon
 
 
 class SystemTrayIcon(QObject):
@@ -117,8 +118,7 @@ class SystemTrayIcon(QObject):
                 icon = style.standardIcon(style.StandardPixmap.SP_BrowserReload)
                 self._tray.setToolTip(f"Meeting Note - {tr('Сохранение...')}")
             else:
-                # Normal icon
-                icon = style.standardIcon(style.StandardPixmap.SP_MediaPlay)
+                icon = get_app_icon()
                 self._tray.setToolTip("Meeting Note")
 
             self._tray.setIcon(icon)

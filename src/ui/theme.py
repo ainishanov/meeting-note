@@ -67,8 +67,8 @@ STATUS_BADGE = {
     "transcribed": {"color": STATUS_PROCESSING, "text": tr("Текст готов"), "bg_alpha": 38},
     "summarizing": {"color": STATUS_PROCESSING, "text": tr("Саммари"), "bg_alpha": 38},
     "summary_failed": {"color": STATUS_PENDING, "text": tr("Без саммари"), "bg_alpha": 38},
-    "completed": {"color": STATUS_SUCCESS, "text": tr("Готово"), "bg_alpha": 38},
-    "error": {"color": STATUS_ERROR, "text": tr("Ошибка"), "bg_alpha": 38},
+    "completed": {"color": STATUS_SUCCESS, "text": tr("Завершено"), "bg_alpha": 38},
+    "error": {"color": STATUS_ERROR, "text": tr("Сбой"), "bg_alpha": 38},
 }
 
 
