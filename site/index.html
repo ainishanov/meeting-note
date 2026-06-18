@@ -98,8 +98,24 @@
         ]
       }
     </script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+    </script>
+    <!-- Yandex.Metrika counter -->
+    <script>
+      (function(m,e,t,r,i,k,a){
+        m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+        m[i].l=1*new Date();
+        for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+        k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+      })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=109960032', 'ym');
+
+      ym(109960032, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
+    </script>
+    <!-- /Yandex.Metrika counter -->
   </head>
   <body>
+    <noscript><div><img src="https://mc.yandex.ru/watch/109960032" style="position:absolute; left:-9999px;" alt=""></div></noscript>
     <header class="site-header" aria-label="Site navigation">
       <a class="brand" href="#top" aria-label="Meeting Note home">
         <img src="./assets/app-icon.svg" width="32" height="32" alt="">
@@ -109,7 +125,7 @@
         <a href="#features">Features</a>
         <a href="#privacy">Privacy</a>
         <a href="#roadmap">Roadmap</a>
-        <a href="https://github.com/ainishanov/meeting-note">GitHub</a>
+        <a href="https://github.com/ainishanov/meeting-note" data-goal="github_repo">GitHub</a>
       </nav>
     </header>
 
@@ -125,10 +141,12 @@
             <a
               class="button button-primary"
               href="https://github.com/ainishanov/meeting-note/releases/download/v0.1.2/MeetingNote-v0.1.2-windows-x64.zip"
+              data-goal="download_windows"
             >Download for Windows</a>
             <a
               class="button button-secondary"
               href="https://github.com/ainishanov/meeting-note/issues/new?template=feature_request.yml"
+              data-goal="request_feature"
             >Request a Feature</a>
           </div>
           <dl class="trust-strip" aria-label="Project facts">
@@ -210,8 +228,9 @@
             <a
               class="button button-primary"
               href="https://github.com/ainishanov/meeting-note/issues/new?template=feature_request.yml"
+              data-goal="request_feature"
             >Request a Feature</a>
-            <a class="button button-secondary" href="https://github.com/ainishanov/meeting-note/issues">View Issues</a>
+            <a class="button button-secondary" href="https://github.com/ainishanov/meeting-note/issues" data-goal="view_issues">View Issues</a>
           </div>
         </div>
       </section>
@@ -248,12 +267,32 @@
           <p>Records and summarizes calls.</p>
         </div>
         <nav aria-label="Footer links">
-          <a href="https://github.com/ainishanov/meeting-note/releases/tag/v0.1.2">Latest Release</a>
-          <a href="https://github.com/ainishanov/meeting-note">Source Code</a>
-          <a href="https://github.com/ainishanov/meeting-note/blob/main/SECURITY.md">Security</a>
+          <a href="https://github.com/ainishanov/meeting-note/releases/tag/v0.1.2" data-goal="release_page">Latest Release</a>
+          <a href="https://github.com/ainishanov/meeting-note" data-goal="github_repo">Source Code</a>
+          <a href="https://github.com/ainishanov/meeting-note/blob/main/SECURITY.md" data-goal="security_page">Security</a>
           <a href="./sitemap.xml">Sitemap</a>
         </nav>
       </div>
     </footer>
+    <script>
+      (function() {
+        var metrikaId = 109960032;
+        function reachGoal(goal, target) {
+          if (!goal || typeof window.ym !== "function") {
+            return;
+          }
+          window.ym(metrikaId, "reachGoal", goal, {
+            href: target && target.href ? target.href : "",
+            text: target && target.textContent ? target.textContent.trim() : ""
+          });
+        }
+
+        document.querySelectorAll("[data-goal]").forEach(function(link) {
+          link.addEventListener("click", function() {
+            reachGoal(link.getAttribute("data-goal"), link);
+          });
+        });
+      })();
+    </script>
   </body>
 </html>
