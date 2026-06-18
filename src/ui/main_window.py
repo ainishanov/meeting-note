@@ -1582,7 +1582,7 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             tr("О программе"),
-            "Meeting Note v0.1.1\n\n"
+            "Meeting Note v0.1.2\n\n"
             + tr("Приложение для записи и транскрибации онлайн-звонков.\n\n")
             + "Uses OpenAI speech-to-text models for transcription\n"
             + "and OpenRouter chat models for meeting summaries.",
