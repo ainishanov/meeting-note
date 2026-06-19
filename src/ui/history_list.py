@@ -31,6 +31,28 @@ from src.ui.theme import (
 from src.ui.i18n import tr
 
 
+def _shows_recording_badge(
+    recording: Recording,
+    active_recording_id: Optional[int],
+) -> bool:
+    return (
+        active_recording_id is not None
+        and recording.id == active_recording_id
+        and recording.status == "recording"
+    )
+
+
+def _is_active_recording_or_processing(
+    recording_id: Optional[int],
+    active_recording_id: Optional[int],
+    active_processing_recording_id: Optional[int],
+) -> bool:
+    return recording_id is not None and recording_id in {
+        active_recording_id,
+        active_processing_recording_id,
+    }
+
+
 class RecordingListItem(QWidget):
     """Custom widget for recording list item with card design."""
 
@@ -40,6 +62,7 @@ class RecordingListItem(QWidget):
         is_recording: bool = False,
         file_missing: bool = False,
         match_text: str = "",
+        processing_text: str = "",
         parent=None,
     ):
         super().__init__(parent)
@@ -47,6 +70,7 @@ class RecordingListItem(QWidget):
         self._is_recording = is_recording
         self._file_missing = file_missing
         self._match_text = match_text
+        self._processing_text = processing_text
         self._setup_ui()
 
     def _setup_ui(self):
@@ -101,6 +125,15 @@ class RecordingListItem(QWidget):
             """)
             layout.addWidget(match_label)
 
+        if self._processing_text:
+            processing_label = QLabel(self._processing_text)
+            processing_label.setWordWrap(True)
+            processing_label.setStyleSheet(f"""
+                color: {TEXT_SECONDARY}; font-size: 11px;
+                background: transparent; line-height: 1.4;
+            """)
+            layout.addWidget(processing_label)
+
         # Row 2: Date + Duration (only when it is not already the title)
         date_str = ""
         if self.recording.created_at and display_title != format_recording_title(
@@ -148,9 +181,11 @@ class HistoryListWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._recordings: list[Recording] = []
-        self._current_recording_id: Optional[int] = None
+        self._active_recording_id: Optional[int] = None
+        self._active_processing_recording_id: Optional[int] = None
         self._missing_file_ids: set[int] = set()
         self._match_text_by_id: dict[int, str] = {}
+        self._processing_text_by_id: dict[int, str] = {}
         self._setup_ui()
 
     def _setup_ui(self):
@@ -195,9 +230,15 @@ class HistoryListWidget(QWidget):
         self._empty_label.setVisible(False)
         layout.addWidget(self._empty_label)
 
-    def set_recordings(self, recordings: list[Recording], match_text_by_id: Optional[dict[int, str]] = None):
+    def set_recordings(
+        self,
+        recordings: list[Recording],
+        match_text_by_id: Optional[dict[int, str]] = None,
+        processing_text_by_id: Optional[dict[int, str]] = None,
+    ):
         self._recordings = recordings
         self._match_text_by_id = match_text_by_id or {}
+        self._processing_text_by_id = processing_text_by_id or {}
         self._missing_file_ids = set()
         self._refresh_list()
 
@@ -216,25 +257,42 @@ class HistoryListWidget(QWidget):
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, recording)
 
-            is_recording = (
-                self._current_recording_id is not None
-                and recording.id == self._current_recording_id
-            )
+            is_recording = _shows_recording_badge(recording, self._active_recording_id)
             file_missing = recording.id in self._missing_file_ids
             match_text = self._match_text_by_id.get(recording.id or 0, "")
+            processing_text = self._processing_text_by_id.get(recording.id or 0, "")
             widget = RecordingListItem(
                 recording,
                 is_recording=is_recording,
                 file_missing=file_missing,
                 match_text=match_text,
+                processing_text=processing_text,
             )
             item.setSizeHint(widget.sizeHint())
 
             self.list_widget.addItem(item)
             self.list_widget.setItemWidget(item, widget)
 
+    def set_active_recording_id(self, recording_id: Optional[int]):
+        self._active_recording_id = recording_id
+        self._refresh_list()
+
+    def set_active_processing_recording_id(self, recording_id: Optional[int]):
+        self._active_processing_recording_id = recording_id
+        self._refresh_list()
+
     def set_current_recording_id(self, recording_id: Optional[int]):
-        self._current_recording_id = recording_id
+        self.set_active_recording_id(recording_id)
+
+    def _is_delete_blocked(self, recording_id: Optional[int]) -> bool:
+        return _is_active_recording_or_processing(
+            recording_id,
+            self._active_recording_id,
+            self._active_processing_recording_id,
+        )
+
+    def set_processing_texts(self, processing_text_by_id: dict[int, str]):
+        self._processing_text_by_id = processing_text_by_id
         self._refresh_list()
 
     def _on_item_clicked(self, item: QListWidgetItem):
@@ -259,7 +317,7 @@ class HistoryListWidget(QWidget):
         menu.addSeparator()
 
         delete_action = menu.addAction(tr("Удалить"))
-        if recording.id == self._current_recording_id:
+        if self._is_delete_blocked(recording.id):
             delete_action.setEnabled(False)
             delete_action.setToolTip(tr("Нельзя удалить активную запись"))
         else:
@@ -273,7 +331,7 @@ class HistoryListWidget(QWidget):
     def _emit_deleted(self, recording_id: int):
         logger.info(f"Delete requested for recording {recording_id}")
 
-        if recording_id == self._current_recording_id:
+        if self._is_delete_blocked(recording_id):
             QMessageBox.warning(
                 self,
                 tr("Запись активна"),

@@ -44,6 +44,10 @@ if TYPE_CHECKING:
     from src.core.auto_trigger.trigger_manager import TriggerManager
 
 
+PROCESSING_WATCHDOG_INTERVAL_MS = 60_000
+PROCESSING_STALE_SECONDS = 15 * 60
+
+
 def _set_deterministic_recording_title(db, recording_id: int) -> None:
     """Replace legacy/AI titles with the recording date and time."""
     recording = db.get_recording(recording_id)
@@ -333,7 +337,8 @@ class MainWindow(QMainWindow):
         self._summary_worker: Optional[SummaryWorker] = None
         self._active_processing_job_id: Optional[int] = None
         self._active_processing_job_type: Optional[str] = None
-        self._current_recording_id: Optional[int] = None
+        self._active_recording_id: Optional[int] = None
+        self._active_processing_recording_id: Optional[int] = None
         self.recorder: Optional["AudioRecorder"] = None
         self._recorder_setup_worker: Optional[RecorderSetupWorker] = None
         self._start_after_recorder_ready = False
@@ -341,6 +346,9 @@ class MainWindow(QMainWindow):
         self._close_after_stop = False
         self.trigger_manager: Optional["TriggerManager"] = None
         self._cleanup_done = False
+        self._processing_watchdog_timer = QTimer(self)
+        self._processing_watchdog_timer.setInterval(PROCESSING_WATCHDOG_INTERVAL_MS)
+        self._processing_watchdog_timer.timeout.connect(self._run_processing_watchdog)
 
         # Connect signals for thread-safe updates
         self._audio_level_signal.connect(self._update_audio_level_ui)
@@ -353,6 +361,7 @@ class MainWindow(QMainWindow):
         self._notification_manager = MeetingNotificationManager(parent=self)
         self._setup_connections()
         self._load_history()
+        self._processing_watchdog_timer.start()
         QTimer.singleShot(100, self._setup_auto_trigger)
 
     def _setup_ui(self):
@@ -555,7 +564,10 @@ class MainWindow(QMainWindow):
                 return
 
         recordings = self.db.get_all_recordings(limit=100)
-        self.history_list.set_recordings(recordings)
+        self.history_list.set_recordings(
+            recordings,
+            processing_text_by_id=self._build_processing_text_by_id(),
+        )
         if hasattr(self, "history_search_status"):
             self.history_search_status.setVisible(False)
 
@@ -564,6 +576,80 @@ class MainWindow(QMainWindow):
             (self._transcription_worker and self._transcription_worker.isRunning())
             or (self._summary_worker and self._summary_worker.isRunning())
         )
+
+    def _set_active_recording_id(self, recording_id: Optional[int]) -> None:
+        self._active_recording_id = recording_id
+        self.history_list.set_active_recording_id(recording_id)
+
+    def _set_active_processing_recording_id(
+        self,
+        recording_id: Optional[int],
+    ) -> None:
+        self._active_processing_recording_id = recording_id
+        self.history_list.set_active_processing_recording_id(recording_id)
+
+    def _processing_label(self, job_type: Optional[str]) -> str:
+        if job_type == "summary":
+            return tr("Саммари")
+        return tr("Транскрибация")
+
+    def _queued_recording_status_for_job(self, job: ProcessingJob) -> str:
+        return "transcribed" if job.job_type == "summary" else "pending"
+
+    def _processing_text_for_job(self, job: ProcessingJob) -> str:
+        payload = job.payload or {}
+        progress = payload.get("progress") if isinstance(payload, dict) else None
+        progress = progress if isinstance(progress, dict) else {}
+        message = str(progress.get("message") or "").strip()
+        current = progress.get("current")
+        total = progress.get("total")
+        label = self._processing_label(job.job_type)
+
+        if current is not None and total:
+            return f"{label}: {current}/{total} - {message or job.status}"
+        if message:
+            return f"{label}: {message}"
+        if job.status == "queued":
+            return f"{label}: {tr('в очереди')}"
+        if job.status == "running":
+            return f"{label}: {tr('выполняется')}"
+        return f"{label}: {job.status}"
+
+    def _build_processing_text_by_id(self) -> dict[int, str]:
+        result: dict[int, str] = {}
+        for job in self.db.get_active_processing_jobs():
+            result[job.recording_id] = self._processing_text_for_job(job)
+        return result
+
+    def _refresh_processing_texts(self) -> None:
+        self.history_list.set_processing_texts(self._build_processing_text_by_id())
+
+    def _touch_active_processing_job(
+        self,
+        message: str,
+        current: Optional[int] = None,
+        total: Optional[int] = None,
+    ) -> None:
+        if self._active_processing_job_id is None:
+            return
+
+        progress: dict[str, object] = {
+            "message": message,
+            "updated_unix": int(time.time()),
+        }
+        if current is not None:
+            progress["current"] = current
+        if total is not None:
+            progress["total"] = total
+
+        try:
+            self.db.touch_processing_job(
+                self._active_processing_job_id,
+                {"progress": progress},
+            )
+            self._refresh_processing_texts()
+        except Exception as e:
+            logger.warning(f"Failed to update processing heartbeat: {e}")
 
     def _queue_processing_job(self, recording_id: int, job_type: str) -> int:
         """Queue durable processing and start it when possible."""
@@ -587,7 +673,7 @@ class MainWindow(QMainWindow):
         if not job:
             self._active_processing_job_id = None
             self._active_processing_job_type = None
-            self.history_list.set_current_recording_id(None)
+            self._set_active_processing_recording_id(None)
             return
 
         recording = self.db.get_recording(job.recording_id)
@@ -627,11 +713,21 @@ class MainWindow(QMainWindow):
 
         self._active_processing_job_id = job.id
         self._active_processing_job_type = job.job_type
-        self._current_recording_id = recording.id
-        self.history_list.set_current_recording_id(recording.id)
+        self._set_active_processing_recording_id(recording.id)
 
         self.db.update_processing_job_status(job.id, "running")
         self.db.update_recording_status(recording.id, "transcribing")
+        self.db.update_processing_job_payload(
+            job.id,
+            {
+                "progress": {
+                    "message": tr("Начинаю транскрибацию..."),
+                    "current": 0,
+                    "total": 0,
+                    "updated_unix": int(time.time()),
+                }
+            },
+        )
         self.status_label.setText(tr("Транскрибация в очереди запущена"))
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)
@@ -666,11 +762,19 @@ class MainWindow(QMainWindow):
 
         self._active_processing_job_id = job.id
         self._active_processing_job_type = job.job_type
-        self._current_recording_id = recording.id
-        self.history_list.set_current_recording_id(recording.id)
+        self._set_active_processing_recording_id(recording.id)
 
         self.db.update_processing_job_status(job.id, "running")
         self.db.update_recording_status(recording.id, "summarizing")
+        self.db.update_processing_job_payload(
+            job.id,
+            {
+                "progress": {
+                    "message": tr("Генерация саммари: {estimate}", estimate=estimate),
+                    "updated_unix": int(time.time()),
+                }
+            },
+        )
         self.status_label.setText(tr("Генерация саммари: {estimate}", estimate=estimate))
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)
@@ -696,7 +800,8 @@ class MainWindow(QMainWindow):
         self._active_processing_job_id = None
         self._active_processing_job_type = None
         if not self._has_active_processing_worker():
-            self.history_list.set_current_recording_id(None)
+            self._set_active_processing_recording_id(None)
+            self._refresh_processing_texts()
         QTimer.singleShot(0, self._process_next_processing_job)
 
     def _on_history_search_changed(self, text: str):
@@ -725,7 +830,11 @@ class MainWindow(QMainWindow):
                     recordings.append(recording)
                     seen_ids.add(recording_id)
 
-            self.history_list.set_recordings(recordings, match_text_by_id=match_text_by_id)
+            self.history_list.set_recordings(
+                recordings,
+                match_text_by_id=match_text_by_id,
+                processing_text_by_id=self._build_processing_text_by_id(),
+            )
             self.history_search_status.setText(tr("Найдено: {count}", count=len(recordings)))
             self.history_search_status.setVisible(True)
         except Exception as e:
@@ -737,26 +846,8 @@ class MainWindow(QMainWindow):
         """Resume durable processing jobs left by a prior shutdown."""
         requeued = self.db.requeue_running_processing_jobs()
 
-        stale_recordings = self.db.get_recordings_by_statuses(["recording"])
-        recovered_stale = 0
-        for recording in stale_recordings:
-            if recording.id is None:
-                continue
-            transcript = self.db.get_transcript(recording.id)
-            if transcript and transcript.full_text:
-                self.db.create_processing_job(recording.id, "summary")
-                self.db.update_recording_status(recording.id, "transcribed")
-                recovered_stale += 1
-            else:
-                self.db.update_recording_status(recording.id, "error")
-                self.db.fail_processing_jobs_for_recording(
-                    recording.id,
-                    "Recording was interrupted before it was stopped cleanly",
-                )
-                recovered_stale += 1
-
         legacy_interrupted = self.db.get_recordings_by_statuses(
-            ["pending", "transcribing", "summarizing"]
+            ["recording", "pending", "transcribing", "summarizing"]
         )
         queued_legacy = 0
         for recording in legacy_interrupted:
@@ -780,9 +871,68 @@ class MainWindow(QMainWindow):
                 )
 
         active_jobs = self.db.get_active_processing_jobs()
-        if recovered_stale or requeued or queued_legacy or active_jobs:
+        if requeued or queued_legacy or active_jobs:
             self.status_label.setText(
                 tr("Продолжаю очередь обработки: {count} задач", count=len(active_jobs))
+            )
+            self._load_history()
+            QTimer.singleShot(0, self._process_next_processing_job)
+
+    def _requeue_processing_job_for_later(
+        self,
+        job: ProcessingJob,
+        reason: str,
+    ) -> bool:
+        if not job.id:
+            return False
+
+        requeued = self.db.requeue_processing_job(job.id, reason)
+        if not requeued:
+            return False
+
+        self.db.update_recording_status(
+            job.recording_id,
+            self._queued_recording_status_for_job(job),
+        )
+        if job.id == self._active_processing_job_id:
+            self._active_processing_job_id = None
+            self._active_processing_job_type = None
+            self._set_active_processing_recording_id(None)
+        logger.warning(f"Requeued processing job {job.id}: {reason}")
+        return True
+
+    def _requeue_active_processing_job_for_later(self, reason: str) -> bool:
+        if self._active_processing_job_id is None:
+            return False
+
+        job = self.db.get_processing_job(self._active_processing_job_id)
+        if not job:
+            self._active_processing_job_id = None
+            self._active_processing_job_type = None
+            self._set_active_processing_recording_id(None)
+            return False
+
+        return self._requeue_processing_job_for_later(job, reason)
+
+    def _run_processing_watchdog(self) -> None:
+        if self._cleanup_done:
+            return
+
+        requeued_count = 0
+        for job in self.db.get_stale_running_processing_jobs(PROCESSING_STALE_SECONDS):
+            if job.id == self._active_processing_job_id and self._has_active_processing_worker():
+                logger.warning(
+                    f"Processing job {job.id} has no recent progress but worker is still running"
+                )
+                continue
+
+            reason = tr("Задача зависла без активного воркера, возвращена в очередь")
+            if self._requeue_processing_job_for_later(job, reason):
+                requeued_count += 1
+
+        if requeued_count:
+            self.status_label.setText(
+                tr("Возвращено в очередь: {count} задач", count=requeued_count)
             )
             self._load_history()
             QTimer.singleShot(0, self._process_next_processing_job)
@@ -903,11 +1053,11 @@ class MainWindow(QMainWindow):
                     tr("Не удалось создать запись в базе:\n{error}", error=e),
                 )
                 return
-            self._current_recording_id = recording_id
+            self._active_recording_id = recording_id
 
             # Refresh history and mark this recording as active
             self._load_history()
-            self.history_list.set_current_recording_id(recording_id)
+            self.history_list.set_active_recording_id(recording_id)
 
             self.status_label.setText(tr("Запись: {title}", title=title))
             logger.info(f"Recording started: {title}")
@@ -972,14 +1122,15 @@ class MainWindow(QMainWindow):
 
         close_after_stop = self._close_after_stop
         self._close_after_stop = False
+        recording_id = self._active_recording_id
 
         self.progress_bar.setVisible(False)
         self.transcript_view.hide_progress()
-        self.history_list.set_current_recording_id(None)
+        self._set_active_recording_id(None)
 
         if isinstance(result, Exception):
-            if self._current_recording_id is not None:
-                self.db.update_recording_status(self._current_recording_id, "error")
+            if recording_id is not None:
+                self.db.update_recording_status(recording_id, "error")
                 self._load_history()
             self.status_label.setText(tr("Не удалось сохранить запись"))
             if not close_after_stop:
@@ -991,6 +1142,7 @@ class MainWindow(QMainWindow):
         else:
             self._finalize_stopped_recording(
                 result,
+                recording_id=recording_id,
                 start_processing=not close_after_stop,
                 show_messages=not close_after_stop,
             )
@@ -1001,30 +1153,31 @@ class MainWindow(QMainWindow):
     def _finalize_stopped_recording(
         self,
         result: StopRecordingResult,
+        recording_id: Optional[int],
         start_processing: bool,
         show_messages: bool,
     ) -> None:
         """Update DB/UI after a recording has been saved."""
         audio_path = result.audio_path
         if not audio_path:
-            if self._current_recording_id is not None:
-                self.db.update_recording_status(self._current_recording_id, "error")
+            if recording_id is not None:
+                self.db.update_recording_status(recording_id, "error")
                 self._load_history()
             self.status_label.setText(tr("Не удалось сохранить запись"))
             return
 
-        if self._current_recording_id is None:
+        if recording_id is None:
             self.status_label.setText(tr("Запись сохранена"))
             return
 
         if result.duration_seconds is not None:
             self.db.update_recording_duration(
-                self._current_recording_id,
+                recording_id,
                 int(result.duration_seconds),
             )
 
         # Check minimum duration before transcription
-        recording = self.db.get_recording(self._current_recording_id)
+        recording = self.db.get_recording(recording_id)
         if recording and recording.duration_seconds is not None:
             min_duration = self.settings.min_recording_duration
             if recording.duration_seconds < min_duration:
@@ -1035,7 +1188,7 @@ class MainWindow(QMainWindow):
                 self.status_label.setText(
                     tr("Запись слишком короткая ({duration:.1f}s), транскрибация пропущена", duration=recording.duration_seconds)
                 )
-                self.db.update_recording_status(self._current_recording_id, "completed")
+                self.db.update_recording_status(recording_id, "completed")
                 self._load_history()
 
                 if show_messages:
@@ -1052,7 +1205,7 @@ class MainWindow(QMainWindow):
         if result.is_silent:
             logger.warning("Recording is mostly silent, skipping transcription")
             self.status_label.setText(tr("Запись пустая (тишина), транскрибация пропущена"))
-            self.db.update_recording_status(self._current_recording_id, "completed")
+            self.db.update_recording_status(recording_id, "completed")
             self._load_history()
 
             if show_messages:
@@ -1069,10 +1222,10 @@ class MainWindow(QMainWindow):
             self.progress_bar.setVisible(True)
             self.progress_bar.setRange(0, 0)  # Indeterminate
 
-            self._queue_processing_job(self._current_recording_id, "transcription")
+            self._queue_processing_job(recording_id, "transcription")
         else:
-            self.db.update_recording_status(self._current_recording_id, "pending")
-            self.db.create_processing_job(self._current_recording_id, "transcription")
+            self.db.update_recording_status(recording_id, "pending")
+            self.db.create_processing_job(recording_id, "transcription")
             self.status_label.setText(tr("Запись сохранена"))
 
         # Refresh history
@@ -1081,10 +1234,13 @@ class MainWindow(QMainWindow):
     def _on_transcription_progress(self, message: str):
         """Handle transcription progress updates."""
         self.status_label.setText(message)
+        self._touch_active_processing_job(message)
 
     def _on_transcription_detailed_progress(self, current: int, total: int, message: str):
         """Handle detailed transcription progress updates."""
         self.transcript_view.update_progress(current, total, message)
+        self.status_label.setText(message)
+        self._touch_active_processing_job(message, current=current, total=total)
 
     def _is_recording_silent(self, audio_path: Path) -> bool:
         """
@@ -1143,8 +1299,8 @@ class MainWindow(QMainWindow):
             self.status_label.setText(tr("Транскрипт готов, саммари добавлено в очередь"))
 
             # Show the new transcript
-            if self._current_recording_id is not None:
-                recording = self.db.get_recording(self._current_recording_id)
+            if self._active_processing_recording_id is not None:
+                recording = self.db.get_recording(self._active_processing_recording_id)
                 if recording:
                     self._on_recording_selected(recording)
                     self._queue_processing_job(recording.id, "summary")
@@ -1187,15 +1343,28 @@ class MainWindow(QMainWindow):
         transcript = self.db.get_transcript(recording.id)
         segments = self.db.get_segments(transcript.id) if transcript else []
         summary = self.db.get_summary(recording.id)
+        processing_job = self.db.get_latest_processing_job_for_recording(recording.id)
 
         audio_path = Path(recording.audio_path) if recording.audio_path else None
         if audio_path and not audio_path.is_absolute():
             audio_path = Path.cwd() / audio_path
 
         if audio_path and not audio_path.exists():
-            self.transcript_view.show_file_missing(recording, transcript, segments, summary)
+            self.transcript_view.show_file_missing(
+                recording,
+                transcript,
+                segments,
+                summary,
+                processing_job=processing_job,
+            )
         else:
-            self.transcript_view.set_recording(recording, transcript, segments, summary)
+            self.transcript_view.set_recording(
+                recording,
+                transcript,
+                segments,
+                summary,
+                processing_job=processing_job,
+            )
 
     def _on_delete_missing_requested(self, recording_id: int):
         """Handle delete request from transcript_view for recordings with missing files."""
@@ -1211,10 +1380,13 @@ class MainWindow(QMainWindow):
 
     def _is_recording_delete_blocked(self, recording_id: int) -> bool:
         """Return whether a recording is currently owned by an active worker."""
-        if self._current_recording_id != recording_id:
+        if recording_id == self._active_recording_id:
+            return self.is_recording_active() or self._is_stop_in_progress()
+
+        if recording_id != self._active_processing_recording_id:
             return False
 
-        if self.is_recording_active() or self._is_stop_in_progress():
+        if self._active_processing_job_id is not None:
             return True
 
         return bool(
@@ -1450,10 +1622,11 @@ class MainWindow(QMainWindow):
             )
         else:
             self.status_label.setText(tr("Саммари сгенерировано успешно"))
+            active_recording_id = self._active_processing_recording_id
             self._finish_active_processing_job(True)
             # Refresh current view
-            if self._current_recording_id is not None:
-                recording = self.db.get_recording(self._current_recording_id)
+            if active_recording_id is not None:
+                recording = self.db.get_recording(active_recording_id)
                 if recording:
                     self._on_recording_selected(recording)
 
@@ -1582,11 +1755,31 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             tr("О программе"),
-            "Meeting Note v0.1.2\n\n"
+            "Meeting Note v0.1.0\n\n"
             + tr("Приложение для записи и транскрибации онлайн-звонков.\n\n")
             + "Uses OpenAI speech-to-text models for transcription\n"
             + "and OpenRouter chat models for meeting summaries.",
         )
+
+    def _confirm_close_during_processing(self) -> bool:
+        job_label = self._processing_label(self._active_processing_job_type)
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle(tr("Обработка идёт"))
+        msg_box.setText(
+            tr(
+                "{job_label} ещё выполняется. Закрыть приложение и продолжить после следующего запуска?",
+                job_label=job_label,
+            )
+        )
+        msg_box.setIcon(QMessageBox.Icon.Question)
+        wait_button = msg_box.addButton(tr("Дождаться"), QMessageBox.ButtonRole.RejectRole)
+        close_button = msg_box.addButton(
+            tr("Закрыть и продолжить позже"),
+            QMessageBox.ButtonRole.AcceptRole,
+        )
+        msg_box.setDefaultButton(wait_button)
+        msg_box.exec()
+        return msg_box.clickedButton() == close_button
 
     def closeEvent(self, event):
         """Handle window close."""
@@ -1611,6 +1804,10 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
 
+        if self._has_active_processing_worker() and not self._confirm_close_during_processing():
+            event.ignore()
+            return
+
         self.cleanup_runtime_services()
 
         event.accept()
@@ -1621,16 +1818,18 @@ class MainWindow(QMainWindow):
             return
         self._cleanup_done = True
 
-        if self._active_processing_job_id is not None:
-            try:
-                self.db.update_processing_job_status(
-                    self._active_processing_job_id,
-                    "queued",
-                )
-            except Exception as e:
-                logger.warning(f"Failed to requeue active job on shutdown: {e}")
+        if self._processing_watchdog_timer.isActive():
+            self._processing_watchdog_timer.stop()
+
+        try:
+            self._requeue_active_processing_job_for_later(
+                tr("Приложение закрыто во время обработки")
+            )
+        except Exception as e:
+            logger.warning(f"Failed to requeue active job on shutdown: {e}")
             self._active_processing_job_id = None
             self._active_processing_job_type = None
+            self._set_active_processing_recording_id(None)
 
         if self.trigger_manager is not None:
             self.trigger_manager.stop()

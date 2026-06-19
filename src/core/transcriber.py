@@ -591,11 +591,9 @@ class Transcriber:
 
             logger.debug(f"Processing chunk {i + 1}/{num_chunks} ({start_ms/1000:.1f}s - {end_ms/1000:.1f}s)")
 
-            # Update progress
             if progress_callback:
-                progress_pct = int((i / num_chunks) * 100)
                 time_range = f"{start_ms//1000//60}:{start_ms//1000%60:02d} - {end_ms//1000//60}:{end_ms//1000%60:02d}"
-                message = f"Chunk {i + 1}/{num_chunks} ({time_range})"
+                message = f"Фрагмент {i + 1}/{num_chunks}: обработка ({time_range})"
                 logger.debug(f"Progress update: {i}/{num_chunks} - {message}")
                 progress_callback(i, num_chunks, message)
 
@@ -604,6 +602,13 @@ class Transcriber:
                 logger.info(f"Using cached transcription chunk {i + 1}/{num_chunks}")
                 if cached_chunk.get("skipped"):
                     skipped_chunks += 1
+                    if progress_callback:
+                        reason = cached_chunk.get("skip_reason") or "пропущен"
+                        progress_callback(
+                            i + 1,
+                            num_chunks,
+                            f"Фрагмент {i + 1}/{num_chunks} пропущен: {reason}",
+                        )
                 else:
                     full_text_parts.append(cached_chunk.get("text", ""))
                     cached_segments = [
@@ -617,6 +622,12 @@ class Transcriber:
                     "next_speaker_number",
                     next_speaker_number,
                 )
+                if progress_callback and not cached_chunk.get("skipped"):
+                    progress_callback(
+                        i + 1,
+                        num_chunks,
+                        f"Фрагмент {i + 1}/{num_chunks} уже готов",
+                    )
                 continue
 
             def cache_chunk(
@@ -625,6 +636,7 @@ class Transcriber:
                 chunk_text: str = "",
                 output_segments: Optional[list[TranscriptSegment]] = None,
                 chunk_language: Optional[str] = None,
+                skip_reason: Optional[str] = None,
             ) -> None:
                 if cache_path is None:
                     return
@@ -632,6 +644,7 @@ class Transcriber:
                     "start_ms": start_ms,
                     "end_ms": end_ms,
                     "skipped": skipped,
+                    "skip_reason": skip_reason,
                     "text": chunk_text,
                     "language": chunk_language,
                     "next_speaker_number": next_speaker_number,
@@ -646,7 +659,13 @@ class Transcriber:
             if self._is_silent_chunk(chunk):
                 logger.info(f"Skipping silent chunk {i + 1}/{num_chunks}")
                 skipped_chunks += 1
-                cache_chunk(skipped=True)
+                cache_chunk(skipped=True, skip_reason="тишина")
+                if progress_callback:
+                    progress_callback(
+                        i + 1,
+                        num_chunks,
+                        f"Фрагмент {i + 1}/{num_chunks} пропущен: тишина",
+                    )
                 continue
 
             # Export chunk to bytes with explicit format parameters
@@ -750,7 +769,17 @@ class Transcriber:
                     f"({filtered_count}/{total_segments} segments filtered), skipping"
                 )
                 skipped_chunks += 1
-                cache_chunk(skipped=True, chunk_language=chunk_language)
+                cache_chunk(
+                    skipped=True,
+                    chunk_language=chunk_language,
+                    skip_reason="галлюцинация модели",
+                )
+                if progress_callback:
+                    progress_callback(
+                        i + 1,
+                        num_chunks,
+                        f"Фрагмент {i + 1}/{num_chunks} пропущен: галлюцинация модели",
+                    )
                 continue
 
             # Check for repetitive text in remaining content
@@ -758,7 +787,17 @@ class Transcriber:
             if chunk_text and self._detect_repetitive_text(chunk_text):
                 logger.warning(f"Chunk {i + 1} contains repetitive hallucination, skipping")
                 skipped_chunks += 1
-                cache_chunk(skipped=True, chunk_language=chunk_language)
+                cache_chunk(
+                    skipped=True,
+                    chunk_language=chunk_language,
+                    skip_reason="повторяющаяся галлюцинация",
+                )
+                if progress_callback:
+                    progress_callback(
+                        i + 1,
+                        num_chunks,
+                        f"Фрагмент {i + 1}/{num_chunks} пропущен: повторяющаяся галлюцинация",
+                    )
                 continue
 
             if filtered_count > 0:
@@ -775,6 +814,12 @@ class Transcriber:
                 output_segments=output_chunk_segments,
                 chunk_language=chunk_language,
             )
+            if progress_callback:
+                progress_callback(
+                    i + 1,
+                    num_chunks,
+                    f"Фрагмент {i + 1}/{num_chunks} готов",
+                )
 
         if skipped_chunks > 0:
             logger.info(f"Skipped {skipped_chunks}/{num_chunks} chunks (silent or hallucination)")

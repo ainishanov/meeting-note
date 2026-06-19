@@ -146,6 +146,51 @@ class DatabaseSearchTest(unittest.TestCase):
         self.assertTrue(self.db.update_processing_job_status(job_id, "completed"))
         self.assertEqual(self.db.get_active_processing_jobs(), [])
 
+    def test_processing_job_payload_heartbeat_and_stale_requeue(self):
+        recording_id = self.db.create_recording(
+            Recording(title="Queue", audio_path="queue.wav", status="pending")
+        )
+        job_id = self.db.create_processing_job(recording_id, "transcription")
+
+        self.assertTrue(self.db.update_processing_job_status(job_id, "running"))
+        self.assertTrue(
+            self.db.touch_processing_job(
+                job_id,
+                {
+                    "progress": {
+                        "current": 1,
+                        "total": 3,
+                        "message": "Фрагмент 1/3 готов",
+                    }
+                },
+            )
+        )
+        job = self.db.get_processing_job(job_id)
+        latest = self.db.get_latest_processing_job_for_recording(recording_id)
+
+        self.assertEqual(job.payload["progress"]["current"], 1)
+        self.assertEqual(latest.id, job_id)
+
+        with closing(sqlite3.connect(self.db.db_path)) as conn:
+            conn.execute(
+                """
+                UPDATE processing_jobs
+                SET updated_at = datetime('now', '-20 minutes')
+                WHERE id = ?
+                """,
+                (job_id,),
+            )
+            conn.commit()
+
+        stale_jobs = self.db.get_stale_running_processing_jobs(15 * 60)
+
+        self.assertEqual([job.id for job in stale_jobs], [job_id])
+        self.assertTrue(self.db.requeue_processing_job(job_id, "stale"))
+        requeued = self.db.get_processing_job(job_id)
+        self.assertEqual(requeued.status, "queued")
+        self.assertEqual(requeued.error_message, "stale")
+        self.assertIsNone(requeued.started_at)
+
     def test_status_constraint_migration_keeps_child_foreign_keys(self):
         db_path = Path(self.tmpdir.name) / "legacy_status.db"
         with closing(sqlite3.connect(db_path)) as conn:

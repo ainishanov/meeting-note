@@ -743,6 +743,37 @@ class Database:
             ).fetchone()
             return self._processing_job_from_row(row)
 
+    def get_processing_job(self, job_id: int) -> Optional[ProcessingJob]:
+        """Return a processing job by id."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT *
+                FROM processing_jobs
+                WHERE id = ?
+                """,
+                (job_id,),
+            ).fetchone()
+            return self._processing_job_from_row(row)
+
+    def get_latest_processing_job_for_recording(
+        self,
+        recording_id: int,
+    ) -> Optional[ProcessingJob]:
+        """Return the newest processing job for a recording."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT *
+                FROM processing_jobs
+                WHERE recording_id = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """,
+                (recording_id,),
+            ).fetchone()
+            return self._processing_job_from_row(row)
+
     def get_active_processing_jobs(self) -> list[ProcessingJob]:
         """Return queued/running jobs for startup recovery and diagnostics."""
         with self._get_connection() as conn:
@@ -786,6 +817,53 @@ class Database:
             )
             return cursor.rowcount > 0
 
+    def update_processing_job_payload(
+        self,
+        job_id: int,
+        payload_update: dict[str, Any],
+    ) -> bool:
+        """Merge a small payload update into a processing job and refresh heartbeat."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT payload FROM processing_jobs WHERE id = ?",
+                (job_id,),
+            ).fetchone()
+            if not row:
+                return False
+
+            payload = self._payload_from_value(row["payload"])
+            payload = self._deep_merge_payload(payload, payload_update)
+            cursor = conn.execute(
+                """
+                UPDATE processing_jobs
+                SET payload = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (json.dumps(payload, ensure_ascii=False), job_id),
+            )
+            return cursor.rowcount > 0
+
+    def touch_processing_job(
+        self,
+        job_id: int,
+        payload_update: Optional[dict[str, Any]] = None,
+    ) -> bool:
+        """Refresh a processing job heartbeat, optionally with a payload update."""
+        if payload_update:
+            return self.update_processing_job_payload(job_id, payload_update)
+
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE processing_jobs
+                SET updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (job_id,),
+            )
+            return cursor.rowcount > 0
+
     def requeue_running_processing_jobs(self) -> int:
         """Move jobs left running by a previous shutdown back to queued."""
         with self._get_connection() as conn:
@@ -799,6 +877,48 @@ class Database:
                 """
             )
             return cursor.rowcount
+
+    def get_stale_running_processing_jobs(
+        self,
+        stale_after_seconds: int,
+    ) -> list[ProcessingJob]:
+        """Return running jobs whose heartbeat has not moved recently."""
+        threshold = f"-{max(1, int(stale_after_seconds))} seconds"
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM processing_jobs
+                WHERE status = 'running'
+                  AND COALESCE(updated_at, started_at, created_at)
+                      <= datetime('now', ?)
+                ORDER BY updated_at ASC, id ASC
+                """,
+                (threshold,),
+            ).fetchall()
+            return [job for row in rows if (job := self._processing_job_from_row(row))]
+
+    def requeue_processing_job(
+        self,
+        job_id: int,
+        error_message: Optional[str] = None,
+    ) -> bool:
+        """Move one processing job back to queued for a future retry."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE processing_jobs
+                SET status = 'queued',
+                    error_message = ?,
+                    updated_at = CURRENT_TIMESTAMP,
+                    started_at = NULL,
+                    completed_at = NULL
+                WHERE id = ?
+                  AND status IN ('queued', 'running')
+                """,
+                (error_message, job_id),
+            )
+            return cursor.rowcount > 0
 
     def fail_processing_jobs_for_recording(
         self,
@@ -830,8 +950,32 @@ class Database:
 
         data = dict(row)
         if data.get("payload"):
-            data["payload"] = json.loads(data["payload"])
+            data["payload"] = self._payload_from_value(data["payload"])
         return ProcessingJob(**data)
+
+    @staticmethod
+    def _payload_from_value(value: Optional[str]) -> dict[str, Any]:
+        if not value:
+            return {}
+        try:
+            payload = json.loads(value)
+            return payload if isinstance(payload, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+
+    @classmethod
+    def _deep_merge_payload(
+        cls,
+        base: dict[str, Any],
+        update: dict[str, Any],
+    ) -> dict[str, Any]:
+        merged = dict(base)
+        for key, value in update.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = cls._deep_merge_payload(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
 
     def update_recording_duration(self, recording_id: int, duration: int) -> bool:
         """Update recording duration."""

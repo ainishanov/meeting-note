@@ -23,7 +23,13 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.core.database import Recording, Summary, Transcript, TranscriptSegment
+from src.core.database import (
+    ProcessingJob,
+    Recording,
+    Summary,
+    Transcript,
+    TranscriptSegment,
+)
 from src.core.recording_titles import display_recording_title
 from src.ui.theme import (
     ACCENT_PRIMARY, ACCENT_PRIMARY_HOVER, ACCENT_PRIMARY_PRESSED,
@@ -54,6 +60,7 @@ class TranscriptViewWidget(QWidget):
         self._transcript: Optional[Transcript] = None
         self._segments: list[TranscriptSegment] = []
         self._summary: Optional[Summary] = None
+        self._processing_job: Optional[ProcessingJob] = None
 
         # Audio player is initialized lazily because Qt Multimedia can be slow on startup.
         self._player = None
@@ -485,11 +492,19 @@ class TranscriptViewWidget(QWidget):
 
         return frame
 
-    def set_recording(self, recording, transcript, segments, summary):
+    def set_recording(
+        self,
+        recording,
+        transcript,
+        segments,
+        summary,
+        processing_job: Optional[ProcessingJob] = None,
+    ):
         self._recording = recording
         self._transcript = transcript
         self._segments = segments
         self._summary = summary
+        self._processing_job = processing_job
 
         self.title_label.setText(display_recording_title(recording))
         self.export_button.setEnabled(transcript is not None)
@@ -525,6 +540,7 @@ class TranscriptViewWidget(QWidget):
         self._transcript = None
         self._segments = []
         self._summary = None
+        self._processing_job = None
 
         self._clear_player_source()
         self.player_frame.setVisible(False)
@@ -648,12 +664,18 @@ class TranscriptViewWidget(QWidget):
             lang_names = {"ru": tr("Русский"), "en": "English"}
             language = lang_names.get(self._transcript.language, self._transcript.language)
 
+        audio_path = Path(self._recording.audio_path) if self._recording.audio_path else None
+        if audio_path and not audio_path.is_absolute():
+            audio_path = Path.cwd() / audio_path
+        file_status = tr("найден") if audio_path and audio_path.exists() else tr("не найден")
+
         info_html = f"""
         <p><b>{tr("Название:")}</b> {html.escape(display_recording_title(self._recording))}</p>
         <p><b>{tr("Дата:")}</b> {html.escape(date_str)}</p>
         <p><b>{tr("Длительность:")}</b> {html.escape(duration_str)}</p>
         <p><b>{tr("Язык:")}</b> {html.escape(language)}</p>
         <p><b>{tr("Статус:")}</b> {html.escape(self._display_status(self._recording.status))}</p>
+        <p><b>{tr("Файл найден:")}</b> {html.escape(file_status)}</p>
         <p><b>{tr("Файл:")}</b> {html.escape(self._recording.audio_path)}</p>
         """
 
@@ -663,7 +685,56 @@ class TranscriptViewWidget(QWidget):
             info_html += f"<p><b>{tr('Спикеры:')}</b> {html.escape(speakers_text)}</p>"
             info_html += f"<p><b>{tr('Сегментов:')}</b> {len(self._segments)}</p>"
 
+        if self._processing_job:
+            info_html += self._processing_job_html(self._processing_job)
+
         self.info_text.setText(info_html)
+
+    def _processing_job_html(self, job: ProcessingJob) -> str:
+        payload = job.payload or {}
+        progress = payload.get("progress") if isinstance(payload, dict) else None
+        progress = progress if isinstance(progress, dict) else {}
+
+        job_type = {
+            "transcription": tr("Транскрибация"),
+            "summary": tr("Саммари"),
+        }.get(job.job_type, job.job_type)
+        job_status = {
+            "queued": tr("в очереди"),
+            "running": tr("выполняется"),
+            "completed": tr("завершена"),
+            "failed": tr("ошибка"),
+        }.get(job.status, job.status)
+
+        info_html = f"""
+        <hr>
+        <p><b>{tr("Задача обработки:")}</b> {html.escape(job_type)}</p>
+        <p><b>{tr("Статус задачи:")}</b> {html.escape(job_status)}</p>
+        <p><b>{tr("Попыток:")}</b> {job.attempts}</p>
+        """
+
+        if job.started_at:
+            info_html += f"<p><b>{tr('Запущена:')}</b> {html.escape(str(job.started_at))}</p>"
+        if job.updated_at:
+            info_html += f"<p><b>{tr('Обновлена:')}</b> {html.escape(str(job.updated_at))}</p>"
+        if job.completed_at:
+            info_html += f"<p><b>{tr('Завершена:')}</b> {html.escape(str(job.completed_at))}</p>"
+
+        message = str(progress.get("message") or "").strip()
+        current = progress.get("current")
+        total = progress.get("total")
+        if current is not None and total:
+            progress_text = f"{current}/{total}"
+            if message:
+                progress_text += f" - {message}"
+            info_html += f"<p><b>{tr('Прогресс:')}</b> {html.escape(progress_text)}</p>"
+        elif message:
+            info_html += f"<p><b>{tr('Прогресс:')}</b> {html.escape(message)}</p>"
+
+        if job.error_message:
+            info_html += f"<p><b>{tr('Ошибка:')}</b> {html.escape(job.error_message)}</p>"
+
+        return info_html
 
     def _get_speaker_color(self, speaker: Optional[str]) -> str:
         if not speaker:
@@ -889,12 +960,20 @@ class TranscriptViewWidget(QWidget):
         self.progress_bar.setVisible(False)
         self.progress_frame.setVisible(False)
 
-    def show_file_missing(self, recording: Recording, transcript, segments, summary):
+    def show_file_missing(
+        self,
+        recording: Recording,
+        transcript,
+        segments,
+        summary,
+        processing_job: Optional[ProcessingJob] = None,
+    ):
         """Show a warning screen when the audio file for a recording is missing."""
         self._recording = recording
         self._transcript = transcript
         self._segments = segments
         self._summary = summary
+        self._processing_job = processing_job
 
         self._clear_player_source()
         self.player_frame.setVisible(False)
