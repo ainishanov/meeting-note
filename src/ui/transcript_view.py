@@ -509,6 +509,7 @@ class TranscriptViewWidget(QWidget):
         self.title_label.setText(display_recording_title(recording))
         self.export_button.setEnabled(transcript is not None)
         self.copy_button.setEnabled(transcript is not None and bool(transcript.full_text))
+        self._reset_missing_file_notice()
 
         needs_retry = transcript is None or recording.status in (
             "error",
@@ -959,6 +960,16 @@ class TranscriptViewWidget(QWidget):
         self._delete_missing_button.setVisible(False)
         self.progress_bar.setVisible(False)
         self.progress_frame.setVisible(False)
+
+    def _reset_missing_file_notice(self):
+        try:
+            self._delete_missing_button.clicked.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+        self._delete_missing_button.setVisible(False)
+        if self.progress_bar.isHidden():
+            self.progress_label.setText(tr("Обработка..."))
+            self.progress_frame.setVisible(False)
 
     def show_file_missing(
         self,
