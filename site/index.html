@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Free Windows Meeting Recorder with AI Transcripts - Meeting Note</title>
+    <title>Turn Every Call Into Clear Next Steps - Meeting Note</title>
     <meta
       name="description"
-      content="Free open-source Windows app that records calls, transcribes meetings, and creates AI summaries with your own API keys."
+      content="A Windows meeting assistant that records calls, creates searchable transcripts, and puts decisions and action items first."
     >
     <meta name="robots" content="index,follow,max-image-preview:large">
     <meta name="theme-color" content="#10131d">
@@ -18,22 +18,22 @@
 
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Meeting Note">
-    <meta property="og:title" content="Free Meeting Notes for Windows">
+    <meta property="og:title" content="Turn Every Call Into Clear Next Steps">
     <meta
       property="og:description"
-      content="Record calls, get transcripts, and leave every meeting with searchable AI notes."
+      content="Record the call. Get a searchable transcript, decisions, and action items."
     >
     <meta property="og:url" content="https://ainishanov.github.io/meeting-note/">
     <meta property="og:image" content="https://ainishanov.github.io/meeting-note/assets/og-image.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
-    <meta property="og:image:alt" content="Meeting Note desktop app with the text Free Meeting Notes for Windows">
+    <meta property="og:image:alt" content="Meeting Note desktop app with the text Turn Every Call Into Next Steps">
 
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Free Meeting Notes for Windows">
+    <meta name="twitter:title" content="Turn Every Call Into Clear Next Steps">
     <meta
       name="twitter:description"
-      content="Record calls, get transcripts, and leave every meeting with searchable AI notes."
+      content="Record the call. Get a searchable transcript, decisions, and action items."
     >
     <meta name="twitter:image" content="https://ainishanov.github.io/meeting-note/assets/og-image.png">
 
@@ -46,10 +46,10 @@
         "name": "Meeting Note",
         "applicationCategory": "ProductivityApplication",
         "operatingSystem": "Windows 10, Windows 11",
-        "softwareVersion": "0.2.0",
+        "softwareVersion": "0.3.0",
         "description": "Free open-source Windows app that records calls, transcribes meetings, and creates AI summaries with your own API keys.",
         "url": "https://ainishanov.github.io/meeting-note/",
-        "downloadUrl": "https://github.com/ainishanov/meeting-note/releases/download/v0.2.0/MeetingNote-v0.2.0-windows-x64.zip",
+        "downloadUrl": "https://github.com/ainishanov/meeting-note/releases/download/v0.3.0/MeetingNoteSetup-v0.3.0.exe",
         "codeRepository": "https://github.com/ainishanov/meeting-note",
         "license": "https://github.com/ainishanov/meeting-note/blob/main/LICENSE",
         "image": "https://ainishanov.github.io/meeting-note/assets/og-image.png",
@@ -92,7 +92,7 @@
             "name": "Where can I request features?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Feature requests are tracked in GitHub Issues so users can discuss and vote on improvements."
+              "text": "Send a private feature idea without an account, or open a GitHub Issue when you want a public discussion."
             }
           }
         ]
@@ -111,6 +111,7 @@
         <a href="./download/">Download</a>
         <a href="./install/">Install</a>
         <a href="./privacy/">Privacy</a>
+        <a href="./feedback/">Feedback</a>
         <a href="#roadmap">Roadmap</a>
         <a href="https://github.com/ainishanov/meeting-note" data-goal="github_repo">GitHub</a>
       </nav>
@@ -119,22 +120,22 @@
     <main id="top">
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <p class="eyebrow">Open-source desktop notes</p>
-          <h1 id="hero-title">Free Meeting Notes for Windows</h1>
+          <p class="eyebrow">Windows meeting assistant</p>
+          <h1 id="hero-title">Turn every call into clear next steps.</h1>
           <p class="hero-lede">
-            Record calls, get transcripts, and leave every meeting with searchable AI notes.
+            Record the call. Meeting Note turns it into a searchable transcript, decisions, and action items.
           </p>
           <div class="hero-actions" aria-label="Primary actions">
             <a
               class="button button-primary"
-              href="https://github.com/ainishanov/meeting-note/releases/download/v0.2.0/MeetingNote-v0.2.0-windows-x64.zip"
+              href="https://github.com/ainishanov/meeting-note/releases/download/v0.3.0/MeetingNoteSetup-v0.3.0.exe"
               data-goal="download_windows"
             >Download for Windows</a>
             <a
               class="button button-secondary"
-              href="https://github.com/ainishanov/meeting-note/issues/new?template=feature_request.yml"
-              data-goal="request_feature"
-            >Request a Feature</a>
+              href="#demo"
+              data-goal="watch_demo"
+            >Watch the 30-Second Demo</a>
           </div>
           <dl class="trust-strip" aria-label="Project facts">
             <div>
@@ -143,11 +144,11 @@
             </div>
             <div>
               <dt>Version</dt>
-              <dd>0.2.0</dd>
+              <dd>0.3.0</dd>
             </div>
             <div>
-              <dt>Platform</dt>
-              <dd>Windows</dd>
+              <dt>History</dt>
+              <dd>Local</dd>
             </div>
           </dl>
         </div>
@@ -155,8 +156,21 @@
 
       <section class="outcome-band" aria-label="Core outcome">
         <div class="section-inner outcome-grid">
-          <p>Turn every call into a searchable record.</p>
-          <p>No SaaS dashboard. No lost decisions. Your meeting history stays on your machine.</p>
+          <p>Leave the call knowing what happens next.</p>
+          <p>Your transcript, decisions, and tasks stay searchable on your machine—without adding another bot to the meeting.</p>
+        </div>
+      </section>
+
+      <section class="section demo-section" id="demo" aria-labelledby="demo-title">
+        <div class="section-inner">
+          <p class="eyebrow">30-second walkthrough</p>
+          <h2 id="demo-title">From record to next steps.</h2>
+          <div class="demo-frame">
+            <video controls preload="metadata" poster="./assets/meeting-note-demo-poster.png">
+              <source src="./assets/meeting-note-demo.mp4" type="video/mp4">
+              Your browser does not support the demo video.
+            </video>
+          </div>
         </div>
       </section>
 
@@ -190,7 +204,7 @@
           <h2 id="use-cases-title">Choose the job you need done.</h2>
           <div class="link-grid">
             <a class="link-panel" href="./windows-meeting-recorder/">
-              <strong>Free Windows meeting recorder</strong>
+              <strong>Windows meeting recorder</strong>
               <span>Record meeting audio on Windows and keep the history local.</span>
             </a>
             <a class="link-panel" href="./meeting-transcription-app/">
@@ -203,7 +217,7 @@
             </a>
             <a class="link-panel" href="./download/">
               <strong>Download meeting recorder for Windows</strong>
-              <span>Get the latest free Windows ZIP from GitHub Releases.</span>
+              <span>Install the latest Windows release with a normal setup wizard.</span>
             </a>
             <a class="link-panel" href="./install/">
               <strong>Install meeting transcription on Windows</strong>
@@ -239,18 +253,17 @@
       <section class="section" id="roadmap" aria-labelledby="roadmap-title">
         <div class="section-inner roadmap">
           <p class="eyebrow">Open development</p>
-          <h2 id="roadmap-title">Ask for the feature you need next.</h2>
+          <h2 id="roadmap-title">Tell us what should improve next.</h2>
           <p>
-            Bugs, hardware reports, and feature requests live in GitHub Issues. Clear requests help shape
-            the roadmap and make the app better for real meeting workflows.
+            Send a short private response without an account, or use GitHub when the discussion should stay public.
           </p>
           <div class="hero-actions">
             <a
               class="button button-primary"
-              href="https://github.com/ainishanov/meeting-note/issues/new?template=feature_request.yml"
-              data-goal="request_feature"
-            >Request a Feature</a>
-            <a class="button button-secondary" href="https://github.com/ainishanov/meeting-note/issues" data-goal="view_issues">View Issues</a>
+              href="./feedback/"
+              data-goal="open_feedback"
+            >Send Quick Feedback</a>
+            <a class="button button-secondary" href="https://github.com/ainishanov/meeting-note/issues/new?template=feature_request.yml" data-goal="request_feature">Request a Public Feature</a>
           </div>
         </div>
       </section>
@@ -270,7 +283,7 @@
             </details>
             <details>
               <summary>Can I suggest improvements?</summary>
-              <p>Yes. Use GitHub Issues to request features, report hardware problems, or discuss workflow gaps.</p>
+              <p>Yes. Send a short response without an account, or use GitHub Issues for a public technical request.</p>
             </details>
           </div>
         </div>
@@ -290,7 +303,8 @@
           <a href="./download/">Download</a>
           <a href="./install/">Install</a>
           <a href="./privacy/">Privacy</a>
-          <a href="https://github.com/ainishanov/meeting-note/releases/tag/v0.2.0" data-goal="release_page">Latest Release</a>
+          <a href="./feedback/">Feedback</a>
+          <a href="https://github.com/ainishanov/meeting-note/releases/tag/v0.3.0" data-goal="release_page">Latest Release</a>
           <a href="https://github.com/ainishanov/meeting-note" data-goal="github_repo">Source Code</a>
           <a href="https://github.com/ainishanov/meeting-note/blob/main/SECURITY.md" data-goal="security_page">Security</a>
           <a href="./sitemap.xml">Sitemap</a>

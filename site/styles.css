@@ -256,6 +256,25 @@ h1 {
   letter-spacing: 0;
 }
 
+.demo-section {
+  background: #0f131c;
+}
+
+.demo-frame {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: #080a0f;
+  box-shadow: var(--shadow);
+}
+
+.demo-frame video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #080a0f;
+}
+
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -466,6 +485,11 @@ details p {
 
 .content-card li + li {
   margin-top: 10px;
+}
+
+.checksum {
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }
 
 .side-panel {
