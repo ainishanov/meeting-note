@@ -266,6 +266,37 @@ class OnboardingDialog(QDialog):
             label.setStyleSheet(f"font-size: 14px; color: {TEXT_PRIMARY};")
             checklist_layout.addWidget(label)
         layout.addWidget(checklist)
+
+        privacy = self._card()
+        privacy_layout = QVBoxLayout(privacy)
+        privacy_layout.setContentsMargins(20, 16, 20, 16)
+        privacy_layout.setSpacing(8)
+        privacy_title = QLabel(tr("Помогать улучшать Meeting Note"))
+        privacy_title.setStyleSheet(
+            f"font-size: 13px; font-weight: 600; color: {TEXT_PRIMARY};"
+        )
+        privacy_layout.addWidget(privacy_title)
+        self.analytics_checkbox = QCheckBox(
+            tr("Отправлять анонимные этапы воронки")
+        )
+        self.crash_checkbox = QCheckBox(
+            tr("Отправлять очищенные отчёты о сбоях")
+        )
+        privacy_layout.addWidget(self.analytics_checkbox)
+        privacy_layout.addWidget(self.crash_checkbox)
+        privacy_note = QLabel(
+            tr(
+                "Не отправляются записи, расшифровки, саммари, названия встреч, "
+                "API-ключи или логи. Разрешённые события отправляются в закрытые "
+                "Google Forms. Оба пункта необязательны."
+            )
+        )
+        privacy_note.setWordWrap(True)
+        privacy_note.setStyleSheet(
+            f"font-size: 11px; color: {TEXT_TERTIARY};"
+        )
+        privacy_layout.addWidget(privacy_note)
+        layout.addWidget(privacy)
         layout.addStretch()
         return page
 
@@ -288,6 +319,8 @@ class OnboardingDialog(QDialog):
         self.openai_key_input.setText(get_openai_api_key() or "")
         self.openrouter_key_input.setText(get_openrouter_api_key() or "")
         self.mic_checkbox.setChecked(self.settings.microphone_enabled)
+        self.analytics_checkbox.setChecked(self.settings.anonymous_analytics_enabled)
+        self.crash_checkbox.setChecked(self.settings.crash_reports_enabled)
 
     def _set_page(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
@@ -404,6 +437,9 @@ class OnboardingDialog(QDialog):
                 "APP_LANGUAGE": self.language_combo.currentData(),
                 "MICROPHONE_ENABLED": microphone_enabled,
                 "ONBOARDING_COMPLETED": True,
+                "PRIVACY_CHOICE_COMPLETED": True,
+                "ANONYMOUS_ANALYTICS_ENABLED": self.analytics_checkbox.isChecked(),
+                "CRASH_REPORTS_ENABLED": self.crash_checkbox.isChecked(),
             }
         )
         reload_settings()

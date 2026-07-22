@@ -19,6 +19,7 @@ a = Analysis(
         'pydantic',
         'pydantic_settings',
         'loguru',
+        'sentry_sdk',
         'keyring',
         'keyring.backends',
         'keyring.backends.Windows',

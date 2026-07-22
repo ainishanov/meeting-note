@@ -42,6 +42,7 @@ from src.ui.resources import get_app_icon
 from src.ui.transcript_view import TranscriptViewWidget
 from src.ui.i18n import tr
 from src.utils.config import get_settings
+from src.utils.telemetry import capture_exception, duration_bucket, track_event
 
 if TYPE_CHECKING:
     from src.core.audio_recorder import AudioRecorder
@@ -390,6 +391,9 @@ class MainWindow(QMainWindow):
         self._meeting_detected_signal.connect(self._show_notification_safe)
 
         self._setup_ui()
+        from src.ui.update_manager import UpdateManager
+
+        self._update_manager = UpdateManager(self)
 
         # Notification manager for meeting detection (create after UI is ready)
         self._notification_manager = MeetingNotificationManager(parent=self)
@@ -397,6 +401,7 @@ class MainWindow(QMainWindow):
         self._load_history()
         self._processing_watchdog_timer.start()
         QTimer.singleShot(100, self._setup_auto_trigger)
+        QTimer.singleShot(2500, self._check_for_updates_silently)
 
     def _setup_ui(self):
         """Initialize the user interface."""
@@ -528,6 +533,12 @@ class MainWindow(QMainWindow):
 
         # Help menu
         help_menu = menubar.addMenu(tr("Помощь"))
+
+        update_action = QAction(tr("Проверить обновления"), self)
+        update_action.triggered.connect(self._check_for_updates)
+        help_menu.addAction(update_action)
+
+        help_menu.addSeparator()
 
         feedback_action = QAction(tr("Поделиться отзывом"), self)
         feedback_action.triggered.connect(self._open_feedback)
@@ -1122,6 +1133,7 @@ class MainWindow(QMainWindow):
                 recording_id = self.db.create_recording(recording)
             except Exception as e:
                 logger.error(f"Failed to create recording row: {e}")
+                capture_exception(e, "recording_database_create")
                 self.status_label.setText(tr("Не удалось создать запись в базе"))
                 QMessageBox.warning(
                     self,
@@ -1137,7 +1149,9 @@ class MainWindow(QMainWindow):
 
             self.status_label.setText(tr("Запись: {title}", title=title))
             logger.info(f"Recording started: {title}")
+            track_event("recording_started")
         else:
+            track_event("recording_start_failed", reason="audio_device")
             QMessageBox.warning(
                 self,
                 tr("Ошибка"),
@@ -1205,6 +1219,8 @@ class MainWindow(QMainWindow):
         self._set_active_recording_id(None)
 
         if isinstance(result, Exception):
+            capture_exception(result, "recording_save")
+            track_event("recording_save_failed")
             if recording_id is not None:
                 self.db.update_recording_status(recording_id, "error")
                 self._load_history()
@@ -1236,6 +1252,7 @@ class MainWindow(QMainWindow):
         """Update DB/UI after a recording has been saved."""
         audio_path = result.audio_path
         if not audio_path:
+            track_event("recording_save_failed", reason="missing_audio_path")
             if recording_id is not None:
                 self.db.update_recording_status(recording_id, "error")
                 self._load_history()
@@ -1243,6 +1260,7 @@ class MainWindow(QMainWindow):
             return
 
         if recording_id is None:
+            track_event("recording_saved", outcome="untracked")
             self.status_label.setText(tr("Запись сохранена"))
             return
 
@@ -1266,6 +1284,11 @@ class MainWindow(QMainWindow):
                 )
                 self.db.update_recording_status(recording_id, "completed")
                 self._load_history()
+                track_event(
+                    "recording_saved",
+                    outcome="too_short",
+                    duration=duration_bucket(recording.duration_seconds),
+                )
 
                 if show_messages:
                     QMessageBox.information(
@@ -1283,6 +1306,11 @@ class MainWindow(QMainWindow):
             self.status_label.setText(tr("Запись пустая (тишина), транскрибация пропущена"))
             self.db.update_recording_status(recording_id, "completed")
             self._load_history()
+            track_event(
+                "recording_saved",
+                outcome="silent",
+                duration=duration_bucket(result.duration_seconds),
+            )
 
             if show_messages:
                 QMessageBox.information(
@@ -1306,6 +1334,11 @@ class MainWindow(QMainWindow):
 
         # Refresh history
         self._load_history()
+        track_event(
+            "recording_saved",
+            outcome="queued" if start_processing else "saved_for_later",
+            duration=duration_bucket(result.duration_seconds),
+        )
 
     def _on_transcription_progress(self, message: str):
         """Handle transcription progress updates."""
@@ -1363,6 +1396,8 @@ class MainWindow(QMainWindow):
         self.transcript_view.hide_progress()
 
         if isinstance(result, Exception):
+            capture_exception(result, "transcription")
+            track_event("transcription_failed", error_type=type(result).__name__)
             message = self._format_processing_error(result, "transcription")
             self.status_label.setText(message)
             self._finish_active_processing_job(False, result)
@@ -1372,6 +1407,7 @@ class MainWindow(QMainWindow):
                 message,
             )
         else:
+            track_event("transcription_completed")
             self.status_label.setText(tr("Транскрипт готов, саммари добавлено в очередь"))
 
             # Show the new transcript
@@ -1688,6 +1724,8 @@ class MainWindow(QMainWindow):
         self.transcript_view.hide_progress()
 
         if isinstance(result, Exception):
+            capture_exception(result, "summary")
+            track_event("summary_failed", error_type=type(result).__name__)
             message = self._format_processing_error(result, "summary")
             self.status_label.setText(message)
             self._finish_active_processing_job(False, result)
@@ -1697,6 +1735,7 @@ class MainWindow(QMainWindow):
                 message,
             )
         else:
+            track_event("summary_completed")
             self.status_label.setText(tr("Саммари сгенерировано успешно"))
             active_recording_id = self._active_processing_recording_id
             self._finish_active_processing_job(True)
@@ -1760,6 +1799,9 @@ class MainWindow(QMainWindow):
                 self.settings.vad_silence_threshold_seconds,
             )
             self.settings = reload_settings()
+            from src.utils.telemetry import setup_telemetry
+
+            setup_telemetry(self.settings)
 
             # Update recorder microphone settings
             from src.utils.security import get_microphone_settings
@@ -1799,7 +1841,14 @@ class MainWindow(QMainWindow):
         """Open privacy-safe feedback routes."""
         from src.ui.feedback_dialog import FeedbackDialog
 
+        track_event("feedback_opened")
         FeedbackDialog(self).exec()
+
+    def _check_for_updates_silently(self) -> None:
+        self._update_manager.check(silent=True)
+
+    def _check_for_updates(self) -> None:
+        self._update_manager.check(silent=False, force=True)
 
     def _restart_auto_trigger(self):
         """Restart auto-trigger with new settings."""
@@ -1902,6 +1951,8 @@ class MainWindow(QMainWindow):
 
         if self._processing_watchdog_timer.isActive():
             self._processing_watchdog_timer.stop()
+
+        self._update_manager.cleanup()
 
         try:
             self._requeue_active_processing_job_for_later(

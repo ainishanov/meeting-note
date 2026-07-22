@@ -18,6 +18,9 @@ def global_exception_handler(exc_type, exc_value, exc_tb):
     """Global exception handler to prevent silent crashes."""
     error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
     logger.error(f"Unhandled exception:\n{error_msg}")
+    from src.utils.telemetry import capture_exception
+
+    capture_exception(exc_value, "unhandled")
 
     # Show error dialog if QApplication exists
     from PyQt6.QtWidgets import QApplication, QMessageBox
@@ -80,6 +83,8 @@ class MeetingNoteApp:
         # Set dark theme
         self._set_dark_theme()
 
+        completed_onboarding_now = False
+
         # Make the first successful recording predictable for new users.
         if not self.settings.onboarding_completed:
             from src.ui.onboarding_dialog import OnboardingDialog
@@ -92,6 +97,26 @@ class MeetingNoteApp:
             finally:
                 self._app.setQuitOnLastWindowClosed(quit_on_last_window)
             self.settings = reload_settings()
+            completed_onboarding_now = self.settings.onboarding_completed
+
+        if not self.settings.privacy_choice_completed:
+            from src.ui.privacy_dialog import PrivacyChoiceDialog
+
+            privacy = PrivacyChoiceDialog()
+            quit_on_last_window = self._app.quitOnLastWindowClosed()
+            self._app.setQuitOnLastWindowClosed(False)
+            try:
+                privacy.exec()
+            finally:
+                self._app.setQuitOnLastWindowClosed(quit_on_last_window)
+            self.settings = reload_settings()
+
+        from src.utils.telemetry import setup_telemetry, track_event
+
+        setup_telemetry(self.settings)
+        track_event("app_started")
+        if completed_onboarding_now:
+            track_event("onboarding_completed")
 
         # Create main window
         import_started_at = time.perf_counter()
@@ -148,6 +173,11 @@ class MeetingNoteApp:
 
             self._single_instance_server.close()
             QLocalServer.removeServer(SINGLE_INSTANCE_SERVER)
+
+        from src.utils.telemetry import flush, track_event
+
+        track_event("app_closed")
+        flush()
 
     def _notify_existing_instance(self) -> bool:
         """Ask an already running instance to show its window."""

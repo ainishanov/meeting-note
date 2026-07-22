@@ -8,7 +8,9 @@ generates a summary, and keeps a searchable local history.
 Website: https://ainishanov.github.io/meeting-note/
 
 Download for Windows:
-https://github.com/ainishanov/meeting-note/releases/download/v0.2.0/MeetingNote-v0.2.0-windows-x64.zip
+https://github.com/ainishanov/meeting-note/releases/latest
+
+![Meeting Note turns a call into searchable decisions and action items](site/assets/meeting-note-demo-poster.png)
 
 ## Project Status
 
@@ -29,7 +31,12 @@ compatibility still need broader testing.
 - Guides first-run setup through API keys and a short audio check.
 - Exports notes to TXT, Markdown, and DOCX.
 - Searches across meeting titles and transcript text.
-- Routes product feedback to GitHub Issues and Discussions without attaching meeting data.
+- Sends short private feedback without requiring GitHub, while keeping public
+  technical discussions in Issues and Discussions.
+- Checks GitHub Releases for updates and verifies installer downloads against
+  the published SHA-256 file.
+- Optionally shares anonymous product milestones and privacy-scrubbed crash
+  signals after explicit user consent.
 
 ## Privacy
 
@@ -39,6 +46,11 @@ meeting content and are ignored by git.
 
 Only record meetings when you have the right consent for your jurisdiction and
 organization.
+
+Anonymous product milestones and crash sharing are off by default. If enabled,
+the app sends only the event name, app version, a random installation ID, and
+coarse technical properties to a private Google Form. It never sends meeting
+content, titles, API keys, or logs. See the [privacy page](https://ainishanov.github.io/meeting-note/privacy/).
 
 ## Requirements
 
@@ -52,6 +64,11 @@ Optional:
 - Visual C++ Build Tools if you install `webrtcvad` for voice activity detection.
 
 ## Quick Start
+
+For most Windows users, download the latest setup executable from
+[GitHub Releases](https://github.com/ainishanov/meeting-note/releases/latest).
+
+For source development:
 
 ```powershell
 git clone <repo-url>
@@ -158,6 +175,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.
 
 - Read the [roadmap](docs/ROADMAP.md).
 - Check [troubleshooting](docs/TROUBLESHOOTING.md) before opening a bug.
+- Send [private product feedback](https://ainishanov.github.io/meeting-note/feedback/)
+  without creating an account.
 - Use GitHub Issues for reproducible bugs and scoped feature requests.
 - Use GitHub Discussions for workflow ideas, questions, and product feedback.
 - Review the [security policy](SECURITY.md) before reporting vulnerabilities.

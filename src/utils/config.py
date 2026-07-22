@@ -121,6 +121,31 @@ class Settings(BaseSettings):
         default=False,
         description="Whether the first-run setup has been completed",
     )
+    privacy_choice_completed: bool = Field(
+        default=False,
+        description="Whether the user has saved privacy preferences",
+    )
+    anonymous_analytics_enabled: bool = Field(
+        default=False,
+        description="Share anonymous product funnel events",
+    )
+    crash_reports_enabled: bool = Field(
+        default=False,
+        description="Share privacy-scrubbed crash reports",
+    )
+    update_checks_enabled: bool = Field(
+        default=True,
+        description="Check GitHub Releases for updates",
+    )
+    last_update_check_epoch: int = Field(
+        default=0,
+        ge=0,
+        description="Unix timestamp of the last automatic update check",
+    )
+    sentry_dsn: Optional[str] = Field(
+        default=None,
+        description="Optional Sentry-compatible DSN for source builds",
+    )
 
     # Auto-trigger settings
     trigger_mode: str = Field(

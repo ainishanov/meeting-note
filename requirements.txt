@@ -24,6 +24,7 @@ pydantic-settings>=2.1.0
 
 # Logging
 loguru>=0.7.0
+sentry-sdk>=2.0.0
 
 # Secure credential storage
 keyring>=24.3.0

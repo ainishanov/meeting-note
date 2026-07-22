@@ -108,6 +108,9 @@ class SettingsDialog(QDialog):
         general_tab = self._create_general_tab()
         tab_widget.addTab(general_tab, tr("Общие"))
 
+        privacy_tab = self._create_privacy_tab()
+        tab_widget.addTab(privacy_tab, tr("Приватность"))
+
         # API tab
         api_tab = self._create_api_tab()
         tab_widget.addTab(api_tab, "API")
@@ -242,6 +245,62 @@ class SettingsDialog(QDialog):
         info_label.setOpenExternalLinks(True)
         info_label.setStyleSheet(f"color: {TEXT_TERTIARY};")
         layout.addWidget(info_label)
+
+        layout.addStretch()
+        return widget
+
+    def _create_privacy_tab(self) -> QWidget:
+        """Create transparent, opt-in privacy controls."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        sharing_group = QGroupBox(tr("Диагностика и улучшение продукта"))
+        sharing_layout = QVBoxLayout(sharing_group)
+
+        self.analytics_checkbox = QCheckBox(
+            tr("Отправлять анонимные этапы воронки")
+        )
+        self.analytics_checkbox.setToolTip(
+            tr("Запуск, запись, готовая расшифровка и готовое саммари — без содержимого встречи.")
+        )
+        sharing_layout.addWidget(self.analytics_checkbox)
+
+        self.crash_reports_checkbox = QCheckBox(
+            tr("Отправлять очищенные отчёты о сбоях")
+        )
+        self.crash_reports_checkbox.setToolTip(
+            tr("Технический тип ошибки и версия приложения — без логов и локальных данных.")
+        )
+        sharing_layout.addWidget(self.crash_reports_checkbox)
+
+        privacy_note = QLabel(
+            tr(
+                "Meeting Note никогда не отправляет записи, расшифровки, саммари, "
+                "названия встреч, API-ключи или логи. Разрешённые события "
+                "отправляются в закрытые Google Forms."
+            )
+        )
+        privacy_note.setWordWrap(True)
+        privacy_note.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 11px;")
+        sharing_layout.addWidget(privacy_note)
+        layout.addWidget(sharing_group)
+
+        updates_group = QGroupBox(tr("Обновления"))
+        updates_layout = QVBoxLayout(updates_group)
+        self.update_checks_checkbox = QCheckBox(
+            tr("Автоматически проверять новые версии")
+        )
+        updates_layout.addWidget(self.update_checks_checkbox)
+        updates_note = QLabel(
+            tr(
+                "Проверка обращается только к GitHub Releases и не отправляет "
+                "идентификатор установки."
+            )
+        )
+        updates_note.setWordWrap(True)
+        updates_note.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 11px;")
+        updates_layout.addWidget(updates_note)
+        layout.addWidget(updates_group)
 
         layout.addStretch()
         return widget
@@ -505,6 +564,10 @@ class SettingsDialog(QDialog):
         # Update enabled state
         self._on_mic_enabled_changed(mic_settings.get("enabled", True))
 
+        self.analytics_checkbox.setChecked(self.settings.anonymous_analytics_enabled)
+        self.crash_reports_checkbox.setChecked(self.settings.crash_reports_enabled)
+        self.update_checks_checkbox.setChecked(self.settings.update_checks_enabled)
+
         # Auto-trigger settings
         self.process_monitor_checkbox.setChecked(self.settings.process_monitor_enabled)
         self.vad_checkbox.setChecked(self.settings.vad_enabled)
@@ -554,6 +617,10 @@ class SettingsDialog(QDialog):
                 "VAD_AGGRESSIVENESS": self.vad_aggressiveness.value(),
                 "VAD_SPEECH_THRESHOLD_SECONDS": self.speech_threshold.value(),
                 "VAD_SILENCE_THRESHOLD_SECONDS": self.silence_threshold.value(),
+                "PRIVACY_CHOICE_COMPLETED": True,
+                "ANONYMOUS_ANALYTICS_ENABLED": self.analytics_checkbox.isChecked(),
+                "CRASH_REPORTS_ENABLED": self.crash_reports_checkbox.isChecked(),
+                "UPDATE_CHECKS_ENABLED": self.update_checks_checkbox.isChecked(),
             }
         )
 

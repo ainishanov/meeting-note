@@ -6,11 +6,10 @@ cloud workflow.
 
 ## Near Term
 
-- Publish a signed or checksummed Windows release package.
-- Add a first-run setup checklist for API keys, audio device selection, and test
-  recording.
+- Obtain a trusted Windows code-signing certificate and enable the prepared
+  release secrets.
 - Improve audio-device diagnostics when WASAPI loopback is unavailable.
-- Add screenshots and a short demo GIF to the README.
+- Recruit the first ten Windows users and review the opt-in product funnel.
 - Add more focused tests around processing queue recovery and UI state changes.
 
 ## Product Improvements
@@ -21,6 +20,8 @@ cloud workflow.
 - Export templates for Markdown, DOCX, and plain text.
 - Global search filters by date, status, and speaker.
 - Safer transcript redaction tools before sharing logs or bug reports.
+- Automatic calendar context and export integrations after the core recording
+  funnel is proven reliable.
 
 ## Contributor-Friendly Work
 
