@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PyQt6.QtGui import QIcon
+from PySide6.QtGui import QIcon
 
 
 def resource_path(relative_path: str) -> Path:

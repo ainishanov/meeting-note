@@ -23,7 +23,7 @@ def global_exception_handler(exc_type, exc_value, exc_tb):
     capture_exception(exc_value, "unhandled")
 
     # Show error dialog if QApplication exists
-    from PyQt6.QtWidgets import QApplication, QMessageBox
+    from PySide6.QtWidgets import QApplication, QMessageBox
 
     app = QApplication.instance()
     if app:
@@ -64,8 +64,8 @@ class MeetingNoteApp:
         # Install global exception handler
         sys.excepthook = global_exception_handler
 
-        from PyQt6.QtCore import QTimer
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtCore import QTimer
+        from PySide6.QtWidgets import QApplication
         from src.ui.resources import get_app_icon
 
         # Create Qt application
@@ -169,7 +169,7 @@ class MeetingNoteApp:
             self._tray.hide()
 
         if self._single_instance_server:
-            from PyQt6.QtNetwork import QLocalServer
+            from PySide6.QtNetwork import QLocalServer
 
             self._single_instance_server.close()
             QLocalServer.removeServer(SINGLE_INSTANCE_SERVER)
@@ -181,7 +181,7 @@ class MeetingNoteApp:
 
     def _notify_existing_instance(self) -> bool:
         """Ask an already running instance to show its window."""
-        from PyQt6.QtNetwork import QLocalSocket
+        from PySide6.QtNetwork import QLocalSocket
 
         socket = QLocalSocket()
         socket.connectToServer(SINGLE_INSTANCE_SERVER)
@@ -197,7 +197,7 @@ class MeetingNoteApp:
 
     def _start_single_instance_server(self) -> None:
         """Listen for later launches and use them as a show-window signal."""
-        from PyQt6.QtNetwork import QLocalServer
+        from PySide6.QtNetwork import QLocalServer
 
         QLocalServer.removeServer(SINGLE_INSTANCE_SERVER)
 

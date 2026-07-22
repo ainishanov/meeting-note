@@ -5,7 +5,7 @@ from urllib.parse import parse_qs
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication, QDialog
 
 from src.ui.feedback_dialog import (
     BUG_REPORT_URL,

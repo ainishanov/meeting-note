@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.1 — 2026-07-22
+
+### Changed
+
+- Replaced PyQt6 with the LGPL-licensed Qt for Python bindings while keeping
+  the application under MIT.
+- Locked every release dependency and hash used by GitHub Actions.
+- Added a public code-signing policy, SignPath application checklist, and
+  third-party license notices to release packages.
+
+### Fixed
+
+- Added the previously implicit `sounddevice` dependency required by voice
+  activity mode.
+- Removed Qt signal disconnect warnings introduced by the binding migration.
+
+### Verification
+
+- 52 unit tests pass in a clean environment created from the hash-locked
+  dependencies.
+- A clean PyInstaller build starts successfully and initializes the
+  single-instance guard on Windows.
+
 ## 0.3.0 — 2026-07-22
 
 ### Added

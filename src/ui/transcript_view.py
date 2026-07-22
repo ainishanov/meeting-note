@@ -4,9 +4,9 @@ import html
 from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QTimer
-from PyQt6.QtGui import QTextCharFormat, QColor
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, Signal, QUrl, QTimer
+from PySide6.QtGui import QTextCharFormat, QColor
+from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QFrame,
@@ -49,10 +49,10 @@ from src.ui.i18n import tr
 class TranscriptViewWidget(QWidget):
     """Widget for viewing transcript with speaker segments."""
 
-    export_requested = pyqtSignal(str, Recording)
-    retry_transcription_requested = pyqtSignal(Recording)
-    summary_regeneration_requested = pyqtSignal(Recording)
-    delete_requested = pyqtSignal(int)  # recording_id
+    export_requested = Signal(str, Recording)
+    retry_transcription_requested = Signal(Recording)
+    summary_regeneration_requested = Signal(Recording)
+    delete_requested = Signal(int)  # recording_id
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -71,6 +71,7 @@ class TranscriptViewWidget(QWidget):
         self._pending_audio_play = False
         self._transcript_rendered = False
         self._delete_missing_button = None  # assigned in _setup_ui
+        self._delete_missing_callback = None
 
         self._setup_ui()
 
@@ -929,7 +930,7 @@ class TranscriptViewWidget(QWidget):
         if self._player is not None:
             return self._player
 
-        from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
+        from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 
         self._player = QMediaPlayer()
         self._audio_output = QAudioOutput()
@@ -1001,7 +1002,7 @@ class TranscriptViewWidget(QWidget):
             self.player_frame.setVisible(False)
 
     def _toggle_playback(self):
-        from PyQt6.QtMultimedia import QMediaPlayer
+        from PySide6.QtMultimedia import QMediaPlayer
 
         player = self._ensure_player()
         if self._audio_source_path is None:
@@ -1019,7 +1020,7 @@ class TranscriptViewWidget(QWidget):
             player.play()
 
     def _on_media_status_changed(self, status):
-        from PyQt6.QtMultimedia import QMediaPlayer
+        from PySide6.QtMultimedia import QMediaPlayer
 
         if status == QMediaPlayer.MediaStatus.LoadedMedia:
             self.play_button.setEnabled(True)
@@ -1033,7 +1034,7 @@ class TranscriptViewWidget(QWidget):
             self.play_button.setText("▶")
 
     def _on_playback_state_changed(self, state):
-        from PyQt6.QtMultimedia import QMediaPlayer
+        from PySide6.QtMultimedia import QMediaPlayer
 
         if state == QMediaPlayer.PlaybackState.PlayingState:
             self.play_button.setText("⏸")
@@ -1074,7 +1075,7 @@ class TranscriptViewWidget(QWidget):
         return f"{minutes}:{seconds % 60:02d}"
 
     def seek_to_time(self, seconds: float):
-        from PyQt6.QtMultimedia import QMediaPlayer
+        from PySide6.QtMultimedia import QMediaPlayer
 
         player = self._ensure_player()
         player.setPosition(int(seconds * 1000))
@@ -1110,11 +1111,18 @@ class TranscriptViewWidget(QWidget):
         self.progress_bar.setVisible(False)
         self.progress_frame.setVisible(False)
 
+    def _disconnect_delete_missing_action(self):
+        if self._delete_missing_callback is not None:
+            try:
+                self._delete_missing_button.clicked.disconnect(
+                    self._delete_missing_callback
+                )
+            except (RuntimeError, TypeError):
+                pass
+            self._delete_missing_callback = None
+
     def _reset_missing_file_notice(self):
-        try:
-            self._delete_missing_button.clicked.disconnect()
-        except (RuntimeError, TypeError):
-            pass
+        self._disconnect_delete_missing_action()
         self._delete_missing_button.setVisible(False)
         if self.progress_bar.isHidden():
             self.progress_label.setText(tr("Обработка..."))
@@ -1178,11 +1186,9 @@ class TranscriptViewWidget(QWidget):
         self.progress_bar.setVisible(False)
         self.progress_frame.setVisible(True)
 
-        try:
-            self._delete_missing_button.clicked.disconnect()
-        except (RuntimeError, TypeError):
-            pass
-        self._delete_missing_button.clicked.connect(
+        self._disconnect_delete_missing_action()
+        self._delete_missing_callback = (
             lambda: self.delete_requested.emit(recording.id)
         )
+        self._delete_missing_button.clicked.connect(self._delete_missing_callback)
         self._delete_missing_button.setVisible(True)

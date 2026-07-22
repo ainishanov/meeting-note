@@ -2,9 +2,9 @@
 
 from typing import Callable, Optional
 
-from PyQt6.QtCore import QTimer, pyqtSignal, QObject
-from PyQt6.QtGui import QAction, QIcon
-from PyQt6.QtWidgets import QMenu, QSystemTrayIcon, QApplication
+from PySide6.QtCore import QTimer, Signal, QObject
+from PySide6.QtGui import QAction, QIcon
+from PySide6.QtWidgets import QMenu, QSystemTrayIcon, QApplication
 
 from loguru import logger
 from src.ui.i18n import tr
@@ -19,11 +19,11 @@ class SystemTrayIcon(QObject):
     """
 
     # Signals
-    start_recording_clicked = pyqtSignal()
-    stop_recording_clicked = pyqtSignal()
-    show_window_clicked = pyqtSignal()
-    settings_clicked = pyqtSignal()
-    quit_clicked = pyqtSignal()
+    start_recording_clicked = Signal()
+    stop_recording_clicked = Signal()
+    show_window_clicked = Signal()
+    settings_clicked = Signal()
+    quit_clicked = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)

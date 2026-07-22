@@ -10,6 +10,8 @@ Website: https://ainishanov.github.io/meeting-note/
 Download for Windows:
 https://github.com/ainishanov/meeting-note/releases/latest
 
+[Code signing policy](CODE_SIGNING.md) · [Third-party notices](THIRD_PARTY_NOTICES.md)
+
 ![Meeting Note turns a call into searchable decisions and action items](site/assets/meeting-note-demo-poster.png)
 
 ## Project Status
@@ -188,4 +190,5 @@ summary, and privacy-safe bug report guidance.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). Bundled dependencies retain their own licenses;
+see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
