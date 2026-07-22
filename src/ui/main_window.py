@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 from loguru import logger
-from PyQt6.QtCore import QTimer, Qt, pyqtSignal, QThread
-from PyQt6.QtGui import QAction, QIcon
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import QTimer, Qt, Signal, QThread
+from PySide6.QtGui import QAction, QIcon
+from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
     QLabel,
@@ -101,7 +101,7 @@ class StopRecordingResult:
 class RecorderSetupWorker(QThread):
     """Worker thread for slow audio device initialization."""
 
-    completed = pyqtSignal(object)  # AudioRecorder or Exception
+    completed = Signal(object)  # AudioRecorder or Exception
 
     def __init__(self, settings, on_level_change, on_state_change):
         super().__init__()
@@ -145,7 +145,7 @@ class RecorderSetupWorker(QThread):
 class StopRecordingWorker(QThread):
     """Worker thread for stopping, saving, and probing a recording."""
 
-    completed = pyqtSignal(object)  # StopRecordingResult or Exception
+    completed = Signal(object)  # StopRecordingResult or Exception
 
     def __init__(self, recorder, silence_threshold: int):
         super().__init__()
@@ -207,9 +207,9 @@ class StopRecordingWorker(QThread):
 class TranscriptionWorker(QThread):
     """Worker thread for transcription."""
 
-    finished = pyqtSignal(object)  # TranscriptionResult or Exception
-    progress = pyqtSignal(str)
-    detailed_progress = pyqtSignal(int, int, str)  # current, total, message
+    finished = Signal(object)  # TranscriptionResult or Exception
+    progress = Signal(str)
+    detailed_progress = Signal(int, int, str)  # current, total, message
 
     def __init__(self, audio_path: Path, recording_id: int):
         super().__init__()
@@ -284,8 +284,8 @@ class TranscriptionWorker(QThread):
 class SummaryWorker(QThread):
     """Worker thread for summary-only regeneration (when transcript already exists)."""
 
-    finished = pyqtSignal(object)  # True or Exception
-    progress = pyqtSignal(str)
+    finished = Signal(object)  # True or Exception
+    progress = Signal(str)
 
     def __init__(
         self,
@@ -360,9 +360,9 @@ class MainWindow(QMainWindow):
     """Main application window."""
 
     # Signals for thread-safe UI updates from recording thread
-    _audio_level_signal = pyqtSignal(float)
-    _recording_state_signal = pyqtSignal(object)
-    _meeting_detected_signal = pyqtSignal(str)  # Thread-safe meeting detection
+    _audio_level_signal = Signal(float)
+    _recording_state_signal = Signal(object)
+    _meeting_detected_signal = Signal(str)  # Thread-safe meeting detection
 
     def __init__(self):
         super().__init__()

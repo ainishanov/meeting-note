@@ -8,8 +8,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtCore import QObject, QThread, pyqtSignal
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from src import __version__
 from src.ui.i18n import tr
@@ -24,7 +24,7 @@ from src.utils.updater import (
 
 
 class UpdateCheckWorker(QThread):
-    finished = pyqtSignal(object)
+    finished = Signal(object)
 
     def run(self) -> None:
         try:
@@ -34,7 +34,7 @@ class UpdateCheckWorker(QThread):
 
 
 class UpdateDownloadWorker(QThread):
-    finished = pyqtSignal(object)
+    finished = Signal(object)
 
     def __init__(self, update: UpdateInfo):
         super().__init__()

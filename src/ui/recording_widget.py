@@ -1,8 +1,8 @@
 """Recording control widget with audio level meter."""
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QPainter, QPainterPath
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QPainter, QPainterPath
+from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -121,10 +121,10 @@ class AudioLevelMeter(QWidget):
 class RecordingWidget(QWidget):
     """Widget for recording controls."""
 
-    start_clicked = pyqtSignal()
-    stop_clicked = pyqtSignal()
-    pause_clicked = pyqtSignal()
-    resume_clicked = pyqtSignal()
+    start_clicked = Signal()
+    stop_clicked = Signal()
+    pause_clicked = Signal()
+    resume_clicked = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)

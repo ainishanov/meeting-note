@@ -1,9 +1,9 @@
 """Meeting detection notification popup widget."""
 
 from loguru import logger
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QPainter
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QPainter
+from PySide6.QtWidgets import (
     QApplication,
     QGraphicsDropShadowEffect,
     QHBoxLayout,
@@ -26,8 +26,8 @@ from src.ui.i18n import tr
 class MeetingNotificationWidget(QWidget):
     """Popup notification for meeting detection."""
 
-    start_recording_clicked = pyqtSignal(str)
-    dismiss_clicked = pyqtSignal()
+    start_recording_clicked = Signal(str)
+    dismiss_clicked = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)

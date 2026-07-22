@@ -2,8 +2,8 @@
 
 from typing import Optional
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
@@ -37,7 +37,7 @@ from src.ui.i18n import SUPPORTED_LANGUAGES, tr
 class AudioTestWorker(QThread):
     """Short audio-device probe used by the settings dialog."""
 
-    finished = pyqtSignal(object)
+    finished = Signal(object)
 
     def __init__(
         self,

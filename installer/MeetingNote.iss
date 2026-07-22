@@ -1,5 +1,13 @@
 #ifndef AppVersion
-  #define AppVersion "0.3.0"
+  #define AppVersion "0.3.1"
+#endif
+
+#ifndef AppExeSource
+  #define AppExeSource "..\dist\MeetingNote.exe"
+#endif
+
+#ifndef OutputDirectory
+  #define OutputDirectory "..\release"
 #endif
 
 #define AppName "Meeting Note"
@@ -20,7 +28,7 @@ DefaultDirName={localappdata}\Programs\Meeting Note
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
-OutputDir=..\release
+OutputDir={#OutputDirectory}
 OutputBaseFilename=MeetingNoteSetup-v{#AppVersion}
 SetupIconFile=..\assets\app_icon.ico
 UninstallDisplayIcon={app}\{#AppExeName}
@@ -43,9 +51,11 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\dist\MeetingNote.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#AppExeSource}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\.env.example"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\CODE_SIGNING.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\SECURITY.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\docs\TROUBLESHOOTING.md"; DestDir: "{app}\docs"; Flags: ignoreversion

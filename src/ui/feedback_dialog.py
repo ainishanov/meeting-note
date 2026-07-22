@@ -6,9 +6,9 @@ import urllib.parse
 import urllib.request
 from typing import Optional
 
-from PyQt6.QtCore import Qt, QThread, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, QThread, QUrl, Signal
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
@@ -96,7 +96,7 @@ def submit_feedback(
 
 
 class FeedbackSubmitWorker(QThread):
-    finished = pyqtSignal(object)
+    finished = Signal(object)
 
     def __init__(self, category: str, message: str, contact: str):
         super().__init__()

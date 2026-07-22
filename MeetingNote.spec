@@ -6,9 +6,9 @@ a = Analysis(
     binaries=[],
     datas=[('assets/app_icon.ico', 'assets')],
     hiddenimports=[
-        'PyQt6.QtCore',
-        'PyQt6.QtGui',
-        'PyQt6.QtWidgets',
+        'PySide6.QtCore',
+        'PySide6.QtGui',
+        'PySide6.QtWidgets',
         'sounddevice',
         'numpy',
         'scipy',

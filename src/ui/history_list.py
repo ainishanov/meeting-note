@@ -3,8 +3,8 @@
 from typing import Optional
 
 from loguru import logger
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
     QLabel,
@@ -174,8 +174,8 @@ class RecordingListItem(QWidget):
 class HistoryListWidget(QWidget):
     """Widget displaying recording history."""
 
-    recording_selected = pyqtSignal(Recording)
-    recording_deleted = pyqtSignal(int)
+    recording_selected = Signal(Recording)
+    recording_deleted = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)

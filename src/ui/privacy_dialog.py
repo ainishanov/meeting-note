@@ -1,6 +1,6 @@
 """One-time privacy choice for anonymous analytics and crash reports."""
 
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,

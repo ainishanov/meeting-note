@@ -12,11 +12,11 @@ permissions:
   contents: write
 
 env:
-  RELEASE_VERSION: "0.3.0"
+  RELEASE_VERSION: "0.3.1"
 
 jobs:
   publish:
-    name: Build and publish v0.3.0
+    name: Build and publish v0.3.1
     runs-on: windows-latest
     timeout-minutes: 30
 
@@ -34,7 +34,7 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller
+          pip install --require-hashes -r requirements-lock.txt
 
       - name: Verify source
         shell: pwsh
@@ -126,7 +126,7 @@ jobs:
           New-Item -ItemType Directory -Path "$package/docs" | Out-Null
 
           Copy-Item -LiteralPath "dist/MeetingNote.exe" -Destination "$package/MeetingNote.exe"
-          Copy-Item -LiteralPath ".env.example", "LICENSE", "README.md", "SECURITY.md" -Destination $package
+          Copy-Item -LiteralPath ".env.example", "LICENSE", "README.md", "SECURITY.md", "CODE_SIGNING.md", "THIRD_PARTY_NOTICES.md" -Destination $package
           Copy-Item -LiteralPath "docs/ROADMAP.md", "docs/TROUBLESHOOTING.md" -Destination "$package/docs"
 
           @"
@@ -134,6 +134,9 @@ jobs:
 
           Highlights
 
+          - The Windows UI now uses the LGPL-licensed Qt for Python bindings, keeping the app's MIT licensing clear.
+          - Release dependencies are version-locked and verified with SHA-256 hashes.
+          - Code-signing policy and third-party notices are included with the distribution.
           - Open meetings instantly: audio and transcript content now load only when needed.
           - See the outcome first: Summary is the default view, with decisions and tasks at the top.
           - Find meetings faster with semantic titles and automatic history backfill.
@@ -195,6 +198,9 @@ jobs:
           @"
           ## What changed
 
+          - Migrated the Windows UI from PyQt6 to the LGPL-licensed Qt for Python bindings while preserving behavior.
+          - Locked release dependencies with SHA-256 hashes for reproducible signing inputs.
+          - Added the public code-signing policy and bundled third-party notices.
           - Meeting selection is now instant because audio and transcript data load only when opened.
           - Summary opens first and puts decisions, tasks, and meeting metrics before the full transcript.
           - Semantic titles and history backfill make old and new meetings easier to find.
@@ -211,6 +217,8 @@ jobs:
           Portable option: download ``MeetingNote-v$env:RELEASE_VERSION-windows-x64.zip``, extract it, and run ``MeetingNote.exe``.
 
           $signingNote
+
+          Review the [code signing policy](https://github.com/ainishanov/meeting-note/blob/main/CODE_SIGNING.md).
 
           ## Verification
 
