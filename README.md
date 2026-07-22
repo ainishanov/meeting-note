@@ -8,7 +8,7 @@ generates a summary, and keeps a searchable local history.
 Website: https://ainishanov.github.io/meeting-note/
 
 Download for Windows:
-https://github.com/ainishanov/meeting-note/releases/download/v0.1.2/MeetingNote-v0.1.2-windows-x64.zip
+https://github.com/ainishanov/meeting-note/releases/download/v0.2.0/MeetingNote-v0.2.0-windows-x64.zip
 
 ## Project Status
 
@@ -24,8 +24,12 @@ compatibility still need broader testing.
 - Transcribes audio through OpenAI speech-to-text models.
 - Generates meeting summaries through OpenRouter-compatible chat models.
 - Keeps a durable processing queue, so transcription and summary jobs can resume after restart.
+- Opens completed meetings on a decision-first summary with action items at the top.
+- Generates semantic meeting titles and keeps transcript rendering responsive.
+- Guides first-run setup through API keys and a short audio check.
 - Exports notes to TXT, Markdown, and DOCX.
 - Searches across meeting titles and transcript text.
+- Routes product feedback to GitHub Issues and Discussions without attaching meeting data.
 
 ## Privacy
 

@@ -130,6 +130,7 @@ class RecordingWidget(QWidget):
         super().__init__(parent)
         self._recording_state = "idle"
         self._recording_duration = 0
+        self._detected_app = ""
         self._setup_ui()
         self._setup_timer()
 
@@ -139,71 +140,74 @@ class RecordingWidget(QWidget):
 
         # Recording frame
         self.frame = QFrame()
-        self.frame.setStyleSheet(f"""
-            QFrame {{
-                background-color: {BG_SURFACE_2};
-                border-radius: {RADIUS_LG}px;
-                border: 1px solid transparent;
-            }}
-        """)
+        self.frame.setObjectName("recordingFrame")
+        self.frame.setMinimumHeight(76)
+        self._set_frame_style()
 
-        frame_layout = QVBoxLayout(self.frame)
-        frame_layout.setContentsMargins(16, 14, 16, 14)
-        frame_layout.setSpacing(12)
-
-        # Top row: indicator + status + duration
-        top_row = QHBoxLayout()
-        top_row.setSpacing(8)
+        frame_layout = QHBoxLayout(self.frame)
+        frame_layout.setContentsMargins(16, 11, 14, 11)
+        frame_layout.setSpacing(14)
 
         self.indicator = RecordingIndicator()
-        top_row.addWidget(self.indicator)
+        frame_layout.addWidget(self.indicator)
+
+        status_column = QVBoxLayout()
+        status_column.setSpacing(3)
 
         self.status_label = QLabel(tr("Готов к записи"))
         self.status_label.setStyleSheet(f"""
-            font-size: 15px; font-weight: 600; color: {TEXT_PRIMARY};
+            font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};
             background: transparent;
         """)
-        top_row.addWidget(self.status_label)
+        status_column.addWidget(self.status_label)
 
-        top_row.addStretch()
+        self.context_label = QLabel(tr("Системный звук и микрофон"))
+        self.context_label.setStyleSheet(
+            f"font-size: 12px; color: {TEXT_TERTIARY}; background: transparent;"
+        )
+        status_column.addWidget(self.context_label)
+
+        self.level_meter = AudioLevelMeter()
+        self.level_meter.setMinimumWidth(190)
+        self.level_meter.hide()
+        status_column.addWidget(self.level_meter)
+        frame_layout.addLayout(status_column, stretch=1)
 
         self.duration_label = QLabel("00:00:00")
         self.duration_label.setStyleSheet(f"""
-            font-size: 18px; font-family: {FONT_MONO}; color: {TEXT_SECONDARY};
+            font-size: 16px; font-family: {FONT_MONO}; color: {TEXT_SECONDARY};
             background: transparent;
         """)
-        top_row.addWidget(self.duration_label)
+        self.duration_label.hide()
+        frame_layout.addWidget(self.duration_label)
 
-        frame_layout.addLayout(top_row)
-
-        # Audio level meter
-        self.level_meter = AudioLevelMeter()
-        frame_layout.addWidget(self.level_meter)
-
-        # Control buttons
-        button_row = QHBoxLayout()
-        button_row.setSpacing(10)
-        button_row.addStretch()
-
-        self.main_button = QPushButton(tr("Начать запись"))
-        self.main_button.setMinimumSize(160, 44)
+        self.main_button = QPushButton(tr("Записать встречу"))
+        self.main_button.setMinimumSize(170, 40)
         self.main_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.main_button.clicked.connect(self._on_main_button_clicked)
         self._update_main_button_style("start")
-        button_row.addWidget(self.main_button)
+        frame_layout.addWidget(self.main_button)
 
         self.stop_button = QPushButton(tr("Остановить"))
-        self.stop_button.setMinimumSize(130, 44)
+        self.stop_button.setMinimumSize(112, 40)
         self.stop_button.setEnabled(False)
+        self.stop_button.hide()
         self.stop_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._apply_stop_button_style()
         self.stop_button.clicked.connect(self.stop_clicked.emit)
-        button_row.addWidget(self.stop_button)
-
-        button_row.addStretch()
-        frame_layout.addLayout(button_row)
+        frame_layout.addWidget(self.stop_button)
 
         layout.addWidget(self.frame)
+
+    def _set_frame_style(self, accent: str | None = None) -> None:
+        border = accent or "transparent"
+        self.frame.setStyleSheet(f"""
+            QFrame#recordingFrame {{
+                background-color: {BG_SURFACE_2};
+                border-radius: {RADIUS_LG}px;
+                border: 1px solid {border};
+            }}
+        """)
 
     def _apply_stop_button_style(self):
         self.stop_button.setStyleSheet(f"""
@@ -234,6 +238,9 @@ class RecordingWidget(QWidget):
     def _setup_timer(self):
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._update_duration)
+        self._detection_timer = QTimer(self)
+        self._detection_timer.setSingleShot(True)
+        self._detection_timer.timeout.connect(self._clear_detected_meeting)
 
     def _update_main_button_style(self, mode: str):
         styles = {
@@ -263,6 +270,7 @@ class RecordingWidget(QWidget):
     def _on_main_button_clicked(self):
         state_value = _state_value(self._recording_state)
         if state_value == "idle":
+            self._clear_detected_meeting()
             self.start_clicked.emit()
         elif state_value == "recording":
             self.pause_clicked.emit()
@@ -275,75 +283,98 @@ class RecordingWidget(QWidget):
 
         state_value = _state_value(state)
         if state_value == "preparing":
+            self._clear_detected_meeting(reset_ui=False)
             self.status_label.setText(tr("Подготовка аудио..."))
-            self.status_label.setStyleSheet(f"font-size: 15px; font-weight: 600; color: {TEXT_SECONDARY}; background: transparent;")
+            self.context_label.setText(tr("Проверяем аудиоустройства"))
+            self.status_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_SECONDARY}; background: transparent;")
             self.main_button.setText(tr("Подготовка..."))
             self.main_button.setEnabled(False)
             self.stop_button.setEnabled(False)
+            self.stop_button.hide()
+            self.duration_label.show()
+            self.level_meter.show()
             self._timer.stop()
-            self.frame.setStyleSheet(f"""
-                QFrame {{
-                    background-color: {BG_SURFACE_2};
-                    border-radius: {RADIUS_LG}px;
-                    border: 1px solid transparent;
-                }}
-            """)
+            self._set_frame_style()
 
         elif state_value == "idle":
+            self._clear_detected_meeting(reset_ui=False)
             self.status_label.setText(tr("Готов к записи"))
-            self.status_label.setStyleSheet(f"font-size: 15px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
-            self.main_button.setText(tr("Начать запись"))
+            self.context_label.setText(tr("Системный звук и микрофон"))
+            self.status_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
+            self.main_button.setText(tr("Записать встречу"))
             self.main_button.setEnabled(True)
             self._update_main_button_style("start")
             self.stop_button.setEnabled(False)
+            self.stop_button.hide()
+            self.duration_label.hide()
+            self.level_meter.hide()
             self._timer.stop()
             self._recording_duration = 0
-            self.frame.setStyleSheet(f"""
-                QFrame {{
-                    background-color: {BG_SURFACE_2};
-                    border-radius: {RADIUS_LG}px;
-                    border: 1px solid transparent;
-                }}
-            """)
+            self.duration_label.setText("00:00:00")
+            self._set_frame_style()
 
         elif state_value == "recording":
+            self._clear_detected_meeting(reset_ui=False)
             self.status_label.setText(tr("Запись"))
-            self.status_label.setStyleSheet(f"font-size: 15px; font-weight: 600; color: {STATUS_RECORDING}; background: transparent;")
+            self.context_label.setText(tr("Системный звук и микрофон записываются"))
+            self.status_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {STATUS_RECORDING}; background: transparent;")
             self.main_button.setText(tr("Пауза"))
             self.main_button.setEnabled(True)
             self._update_main_button_style("pause")
             self.stop_button.setEnabled(True)
+            self.stop_button.show()
+            self.duration_label.show()
+            self.level_meter.show()
             if not self._timer.isActive():
                 self._timer.start(1000)
-            self.frame.setStyleSheet(f"""
-                QFrame {{
-                    background-color: {BG_SURFACE_2};
-                    border-radius: {RADIUS_LG}px;
-                    border-left: 3px solid {STATUS_RECORDING};
-                }}
-            """)
+            self._set_frame_style(STATUS_RECORDING)
 
         elif state_value == "paused":
+            self._clear_detected_meeting(reset_ui=False)
             self.status_label.setText(tr("Пауза"))
-            self.status_label.setStyleSheet(f"font-size: 15px; font-weight: 600; color: {STATUS_PAUSED}; background: transparent;")
+            self.context_label.setText(tr("Запись приостановлена"))
+            self.status_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {STATUS_PAUSED}; background: transparent;")
             self.main_button.setText(tr("Продолжить"))
             self.main_button.setEnabled(True)
             self._update_main_button_style("resume")
             self.stop_button.setEnabled(True)
+            self.stop_button.show()
+            self.duration_label.show()
+            self.level_meter.show()
             self._timer.stop()
-            self.frame.setStyleSheet(f"""
-                QFrame {{
-                    background-color: {BG_SURFACE_2};
-                    border-radius: {RADIUS_LG}px;
-                    border-left: 3px solid {STATUS_PAUSED};
-                }}
-            """)
+            self._set_frame_style(STATUS_PAUSED)
 
         elif state_value == "stopping":
+            self._clear_detected_meeting(reset_ui=False)
             self.status_label.setText(tr("Остановка..."))
+            self.context_label.setText(tr("Сохраняем запись"))
             self.main_button.setEnabled(False)
             self.stop_button.setEnabled(False)
+            self.stop_button.show()
+            self.duration_label.show()
+            self.level_meter.show()
             self._timer.stop()
+
+    def set_detected_meeting(self, app_name: str) -> None:
+        """Highlight a detected call without taking over recording controls."""
+        if _state_value(self._recording_state) != "idle":
+            return
+
+        self._detected_app = _friendly_meeting_app(app_name)
+        self.status_label.setText(tr("Обнаружен созвон"))
+        self.context_label.setText(self._detected_app)
+        self.main_button.setText(tr("Записать этот созвон"))
+        self._set_frame_style(ACCENT_SECONDARY)
+        self._detection_timer.start(30_000)
+
+    def _clear_detected_meeting(self, reset_ui: bool = True) -> None:
+        self._detection_timer.stop()
+        self._detected_app = ""
+        if reset_ui and _state_value(self._recording_state) == "idle":
+            self.status_label.setText(tr("Готов к записи"))
+            self.context_label.setText(tr("Системный звук и микрофон"))
+            self.main_button.setText(tr("Записать встречу"))
+            self._set_frame_style()
 
     def set_audio_level(self, level: float):
         self.level_meter.set_level(level)
@@ -359,3 +390,22 @@ class RecordingWidget(QWidget):
 def _state_value(state: object) -> str:
     value = getattr(state, "value", state)
     return str(value)
+
+
+def _friendly_meeting_app(app_name: str) -> str:
+    value = (app_name or "").lower()
+    labels = (
+        ("zoom", "Zoom"),
+        ("teams", "Microsoft Teams"),
+        ("telemost", "Yandex Telemost"),
+        ("skype", "Skype"),
+        ("discord", "Discord"),
+    )
+    for needle, label in labels:
+        if needle in value:
+            return label
+    if "google meet" in value or "meet.google" in value:
+        return "Google Meet"
+    if any(browser in value for browser in ("chrome", "edge", "firefox", "browser")):
+        return tr("Созвон в браузере")
+    return app_name or tr("Приложение для встреч")

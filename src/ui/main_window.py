@@ -26,10 +26,14 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src import __version__
 from src.core.database import ProcessingJob, Recording, TranscriptSegment, get_database
 from src.core.recording_titles import (
+    display_recording_title,
     format_recording_title,
     is_auto_generated_title,
+    sanitize_semantic_title,
+    semantic_title_from_summary,
 )
 from src.ui.history_list import HistoryListWidget
 from src.ui.meeting_notification import MeetingNotificationManager
@@ -49,15 +53,39 @@ PROCESSING_STALE_SECONDS = 15 * 60
 
 
 def _set_deterministic_recording_title(db, recording_id: int) -> None:
-    """Replace legacy/AI titles with the recording date and time."""
+    """Keep a stable date fallback until a semantic title is available."""
     recording = db.get_recording(recording_id)
     if not recording or not is_auto_generated_title(recording.title):
         return
 
     title = format_recording_title(recording.created_at)
+    if display_recording_title(recording) != title:
+        return
     if recording.title != title:
         db.update_recording_title(recording_id, title)
         logger.info(f"Updated recording title to deterministic title: {title}")
+
+
+def _set_semantic_recording_title(
+    db,
+    summarizer,
+    recording_id: int,
+    transcript_text: str,
+    summary,
+) -> None:
+    """Store a short topic title without overwriting a user-authored title."""
+    recording = db.get_recording(recording_id)
+    if not recording or not is_auto_generated_title(recording.title):
+        return
+
+    title = sanitize_semantic_title(summarizer.generate_title(transcript_text))
+    if not title:
+        title = semantic_title_from_summary(summary)
+    if not title:
+        return
+
+    db.update_recording_title(recording_id, title)
+    logger.info(f"Updated recording title to semantic title: {title}")
 
 
 @dataclass
@@ -304,7 +332,13 @@ class SummaryWorker(QThread):
             )
             db.create_summary(summary)
 
-            _set_deterministic_recording_title(db, self.recording_id)
+            _set_semantic_recording_title(
+                db,
+                summarizer,
+                self.recording_id,
+                self.transcript_text,
+                summary,
+            )
 
             # Mark as completed
             db.update_recording_status(self.recording_id, "completed")
@@ -412,7 +446,28 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.history_search_status)
 
         self.history_list = HistoryListWidget()
-        left_layout.addWidget(self.history_list)
+        left_layout.addWidget(self.history_list, stretch=1)
+
+        self.feedback_button = QPushButton(tr("Поделиться отзывом"))
+        self.feedback_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.feedback_button.setToolTip(tr("Предложить улучшение или сообщить о проблеме"))
+        self.feedback_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {TEXT_SECONDARY};
+                border: 1px solid {BG_SURFACE_1};
+                border-radius: 8px;
+                padding: 8px 10px;
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                color: {TEXT_PRIMARY};
+                border-color: {TEXT_TERTIARY};
+                background-color: {BG_SURFACE_1};
+            }}
+        """)
+        self.feedback_button.clicked.connect(self._open_feedback)
+        left_layout.addWidget(self.feedback_button)
 
         splitter.addWidget(left_panel)
 
@@ -474,6 +529,12 @@ class MainWindow(QMainWindow):
         # Help menu
         help_menu = menubar.addMenu(tr("Помощь"))
 
+        feedback_action = QAction(tr("Поделиться отзывом"), self)
+        feedback_action.triggered.connect(self._open_feedback)
+        help_menu.addAction(feedback_action)
+
+        help_menu.addSeparator()
+
         about_action = QAction(tr("О программе"), self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
@@ -516,6 +577,7 @@ class MainWindow(QMainWindow):
 
     def _show_notification_safe(self, app_name: str):
         """Show notification - called from main thread via signal."""
+        self.recording_widget.set_detected_meeting(app_name)
         self._notification_manager.show_notification(
             app_name=app_name,
             on_start_recording=self._on_notification_start_recording,
@@ -564,12 +626,25 @@ class MainWindow(QMainWindow):
                 return
 
         recordings = self.db.get_all_recordings(limit=100)
+        self._backfill_semantic_history_titles(recordings)
         self.history_list.set_recordings(
             recordings,
             processing_text_by_id=self._build_processing_text_by_id(),
         )
         if hasattr(self, "history_search_status"):
             self.history_search_status.setVisible(False)
+
+    def _backfill_semantic_history_titles(self, recordings: list[Recording]) -> None:
+        """Upgrade date-only history entries from already stored summaries."""
+        for recording in recordings:
+            if recording.id is None or not is_auto_generated_title(recording.title):
+                continue
+            summary = self.db.get_summary(recording.id)
+            title = semantic_title_from_summary(summary)
+            if not title:
+                continue
+            if self.db.update_recording_title(recording.id, title):
+                recording.title = title
 
     def _has_active_processing_worker(self) -> bool:
         return bool(
@@ -830,6 +905,7 @@ class MainWindow(QMainWindow):
                     recordings.append(recording)
                     seen_ids.add(recording_id)
 
+            self._backfill_semantic_history_titles(recordings)
             self.history_list.set_recordings(
                 recordings,
                 match_text_by_id=match_text_by_id,
@@ -1719,6 +1795,12 @@ class MainWindow(QMainWindow):
             if self.status_label.text() != tr("Настройки сохранены, аудио применится после записи"):
                 self.status_label.setText(tr("Настройки сохранены"))
 
+    def _open_feedback(self):
+        """Open privacy-safe feedback routes."""
+        from src.ui.feedback_dialog import FeedbackDialog
+
+        FeedbackDialog(self).exec()
+
     def _restart_auto_trigger(self):
         """Restart auto-trigger with new settings."""
         try:
@@ -1755,7 +1837,7 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             tr("О программе"),
-            "Meeting Note v0.1.0\n\n"
+            f"Meeting Note v{__version__}\n\n"
             + tr("Приложение для записи и транскрибации онлайн-звонков.\n\n")
             + "Uses OpenAI speech-to-text models for transcription\n"
             + "and OpenRouter chat models for meeting summaries.",

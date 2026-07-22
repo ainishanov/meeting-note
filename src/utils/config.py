@@ -117,6 +117,10 @@ class Settings(BaseSettings):
         default="en",
         description="Application interface language: en or ru",
     )
+    onboarding_completed: bool = Field(
+        default=False,
+        description="Whether the first-run setup has been completed",
+    )
 
     # Auto-trigger settings
     trigger_mode: str = Field(

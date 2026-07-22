@@ -78,12 +78,12 @@ class RecordingListItem(QWidget):
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(6)
 
-        # Row 1: Title + status badge
+        # Row 1: semantic title. Status moves to the metadata row so longer
+        # topics remain readable in the sidebar.
         top_row = QHBoxLayout()
-        top_row.setSpacing(8)
+        top_row.setSpacing(0)
 
         # Title
-        title = self.recording.title
         display_title = display_recording_title(self.recording)
 
         title_color = TEXT_TERTIARY if self._file_missing else TEXT_PRIMARY
@@ -93,7 +93,7 @@ class RecordingListItem(QWidget):
             background: transparent;
         """)
         self.title_label.setWordWrap(False)
-        self.title_label.setMaximumWidth(200)
+        self.title_label.setToolTip(display_title)
 
         top_row.addWidget(self.title_label, stretch=1)
 
@@ -109,8 +109,6 @@ class RecordingListItem(QWidget):
             badge_cfg = STATUS_BADGE.get(status, STATUS_BADGE["pending"])
             status_label = QLabel(badge_cfg["text"])
             status_label.setStyleSheet(badge_style(status))
-        top_row.addWidget(status_label)
-
         layout.addLayout(top_row)
 
         if self._match_text:
@@ -153,6 +151,7 @@ class RecordingListItem(QWidget):
             bottom_row.addWidget(date_label)
 
         bottom_row.addStretch()
+        bottom_row.addWidget(status_label)
 
         # Duration
         if self.recording.duration_seconds:
