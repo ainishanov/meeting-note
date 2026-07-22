@@ -1,0 +1,147 @@
+name: Publish Windows release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_VERSION: "0.2.0"
+
+jobs:
+  publish:
+    name: Build and publish v0.2.0
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Verify source
+        shell: pwsh
+        run: |
+          python -m compileall -q src tests
+          python -m unittest discover -s tests -v
+
+      - name: Build Windows executable
+        shell: pwsh
+        run: python -m PyInstaller --noconfirm --distpath dist --workpath build/pyinstaller MeetingNote.spec
+
+      - name: Package release
+        id: package
+        shell: pwsh
+        run: |
+          $package = "MeetingNote-v$env:RELEASE_VERSION-windows-x64"
+          New-Item -ItemType Directory -Path $package | Out-Null
+          New-Item -ItemType Directory -Path "$package/docs" | Out-Null
+
+          Copy-Item -LiteralPath "dist/MeetingNote.exe" -Destination "$package/MeetingNote.exe"
+          Copy-Item -LiteralPath ".env.example", "LICENSE", "README.md", "SECURITY.md" -Destination $package
+          Copy-Item -LiteralPath "docs/ROADMAP.md", "docs/TROUBLESHOOTING.md" -Destination "$package/docs"
+
+          @"
+          Meeting Note v$env:RELEASE_VERSION for Windows x64
+
+          Highlights
+
+          - Open meetings instantly: audio and transcript content now load only when needed.
+          - See the outcome first: Summary is the default view, with decisions and tasks at the top.
+          - Find meetings faster with semantic titles and automatic history backfill.
+          - Complete a focused four-step setup with microphone and system-audio checks.
+          - Use the compact recording bar and the new call-detected prompt.
+          - Send feedback, report bugs, or request features from inside the app.
+
+          Privacy
+
+          Recordings and meeting data stay on this computer unless you configure an
+          external transcription or AI provider. Always get permission before recording
+          other people.
+
+          Known limitations
+
+          - The executable is not code-signed, so Windows SmartScreen may show a warning.
+          - Voice activity detection is optional and requires webrtcvad.
+          - Some non-WAV audio formats may require ffmpeg.
+
+          Verification
+
+          - Automated tests passed on the release runner.
+          - PyInstaller completed a clean Windows x64 build.
+          "@ | Set-Content -LiteralPath "$package/RELEASE_NOTES.txt" -Encoding utf8
+
+          $exeHash = (Get-FileHash -Algorithm SHA256 "$package/MeetingNote.exe").Hash
+          "$exeHash *MeetingNote.exe" | Set-Content -LiteralPath "$package/SHA256SUMS.txt" -Encoding ascii
+
+          $zip = "$package.zip"
+          Compress-Archive -LiteralPath $package -DestinationPath $zip -CompressionLevel Optimal
+          $zipHash = (Get-FileHash -Algorithm SHA256 $zip).Hash
+          "$zipHash *$zip" | Set-Content -LiteralPath "$zip.sha256" -Encoding ascii
+
+          "package=$package" >> $env:GITHUB_OUTPUT
+          "zip=$zip" >> $env:GITHUB_OUTPUT
+          "exe_hash=$exeHash" >> $env:GITHUB_OUTPUT
+          "zip_hash=$zipHash" >> $env:GITHUB_OUTPUT
+
+      - name: Prepare GitHub release notes
+        shell: pwsh
+        run: |
+          @"
+          ## What changed
+
+          - Meeting selection is now instant because audio and transcript data load only when opened.
+          - Summary opens first and puts decisions, tasks, and meeting metrics before the full transcript.
+          - Semantic titles and history backfill make old and new meetings easier to find.
+          - A focused four-step onboarding checks the microphone and system-audio setup.
+          - The recording experience now uses a compact bar and a clear call-detected prompt.
+          - Feedback, bug reports, and feature requests are available inside the app.
+
+          ## Download
+
+          Download ``MeetingNote-v$env:RELEASE_VERSION-windows-x64.zip``, extract it, and run ``MeetingNote.exe``.
+
+          The executable is not code-signed yet, so Windows SmartScreen may show a warning.
+
+          ## Verification
+
+          - Automated tests passed on the Windows release runner.
+          - EXE SHA-256: ``${{ steps.package.outputs.exe_hash }}``
+          - ZIP SHA-256: ``${{ steps.package.outputs.zip_hash }}``
+
+          Full details are in the bundled ``RELEASE_NOTES.txt`` and [CHANGELOG.md](https://github.com/ainishanov/meeting-note/blob/main/CHANGELOG.md).
+          "@ | Set-Content -LiteralPath "release-notes.md" -Encoding utf8
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $package = "${{ steps.package.outputs.package }}"
+          $zip = "${{ steps.package.outputs.zip }}"
+          gh release create "v$env:RELEASE_VERSION" `
+            $zip `
+            "$zip.sha256" `
+            "$package/MeetingNote.exe#MeetingNote.exe" `
+            "$package/SHA256SUMS.txt#SHA256SUMS.txt" `
+            --target "$env:GITHUB_SHA" `
+            --title "Meeting Note v$env:RELEASE_VERSION" `
+            --notes-file "release-notes.md" `
+            --latest
