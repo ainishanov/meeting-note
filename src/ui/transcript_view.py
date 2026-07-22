@@ -67,6 +67,9 @@ class TranscriptViewWidget(QWidget):
         self._audio_output = None
         self._volume = 0.7
         self._is_slider_pressed = False
+        self._audio_source_path: Optional[Path] = None
+        self._pending_audio_play = False
+        self._transcript_rendered = False
         self._delete_missing_button = None  # assigned in _setup_ui
 
         self._setup_ui()
@@ -352,8 +355,8 @@ class TranscriptViewWidget(QWidget):
         layout.addWidget(self.tab_widget)
 
         # === Transcript tab ===
-        transcript_tab = QWidget()
-        transcript_layout = QVBoxLayout(transcript_tab)
+        self.transcript_tab = QWidget()
+        transcript_layout = QVBoxLayout(self.transcript_tab)
         transcript_layout.setContentsMargins(0, 8, 0, 0)
 
         # Search bar
@@ -387,11 +390,11 @@ class TranscriptViewWidget(QWidget):
         """)
         transcript_layout.addWidget(self.transcript_text)
 
-        self.tab_widget.addTab(transcript_tab, tr("Транскрипт"))
+        self.tab_widget.addTab(self.transcript_tab, tr("Транскрипт"))
 
         # === Summary tab ===
-        summary_tab = QWidget()
-        summary_layout = QVBoxLayout(summary_tab)
+        self.summary_tab = QWidget()
+        summary_layout = QVBoxLayout(self.summary_tab)
         summary_layout.setContentsMargins(0, 8, 0, 0)
 
         summary_toolbar = QHBoxLayout()
@@ -421,9 +424,42 @@ class TranscriptViewWidget(QWidget):
         summary_content_layout = QVBoxLayout(summary_content)
         summary_content_layout.setSpacing(16)
 
+        metrics_row = QHBoxLayout()
+        metrics_row.setSpacing(12)
+        decisions_metric, self.decisions_count_label = self._create_metric_card(
+            tr("Принятые решения"), ACCENT_SECONDARY
+        )
+        actions_metric, self.actions_count_label = self._create_metric_card(
+            tr("Задачи"), ACCENT_PRIMARY
+        )
+        metrics_row.addWidget(decisions_metric)
+        metrics_row.addWidget(actions_metric)
+        summary_content_layout.addLayout(metrics_row)
+
+        decisions_section = self._create_section(tr("Принятые решения"), ACCENT_SECONDARY)
+        self.decisions_text = QLabel()
+        self.decisions_text.setWordWrap(True)
+        self.decisions_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.decisions_text.setStyleSheet(
+            f"color: {TEXT_PRIMARY}; font-size: 14px; background: transparent;"
+        )
+        decisions_section.layout().addWidget(self.decisions_text)
+        summary_content_layout.addWidget(decisions_section)
+
+        action_items_section = self._create_section(tr("Задачи"), ACCENT_PRIMARY)
+        self.action_items_text = QLabel()
+        self.action_items_text.setWordWrap(True)
+        self.action_items_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.action_items_text.setStyleSheet(
+            f"color: {TEXT_PRIMARY}; font-size: 14px; background: transparent;"
+        )
+        action_items_section.layout().addWidget(self.action_items_text)
+        summary_content_layout.addWidget(action_items_section)
+
         summary_section = self._create_section(tr("Краткое содержание"))
         self.summary_text = QLabel()
         self.summary_text.setWordWrap(True)
+        self.summary_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.summary_text.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px; background: transparent;")
         summary_section.layout().addWidget(self.summary_text)
         summary_content_layout.addWidget(summary_section)
@@ -431,34 +467,21 @@ class TranscriptViewWidget(QWidget):
         key_points_section = self._create_section(tr("Ключевые темы"))
         self.key_points_text = QLabel()
         self.key_points_text.setWordWrap(True)
+        self.key_points_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.key_points_text.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px; background: transparent;")
         key_points_section.layout().addWidget(self.key_points_text)
         summary_content_layout.addWidget(key_points_section)
-
-        decisions_section = self._create_section(tr("Принятые решения"))
-        self.decisions_text = QLabel()
-        self.decisions_text.setWordWrap(True)
-        self.decisions_text.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px; background: transparent;")
-        decisions_section.layout().addWidget(self.decisions_text)
-        summary_content_layout.addWidget(decisions_section)
-
-        action_items_section = self._create_section(tr("Задачи"))
-        self.action_items_text = QLabel()
-        self.action_items_text.setWordWrap(True)
-        self.action_items_text.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px; background: transparent;")
-        action_items_section.layout().addWidget(self.action_items_text)
-        summary_content_layout.addWidget(action_items_section)
 
         summary_content_layout.addStretch()
 
         scroll.setWidget(summary_content)
         summary_layout.addWidget(scroll)
 
-        self.tab_widget.addTab(summary_tab, tr("Саммари"))
+        self.tab_widget.addTab(self.summary_tab, tr("Саммари"))
 
         # === Info tab ===
-        info_tab = QWidget()
-        info_layout = QVBoxLayout(info_tab)
+        self.info_tab = QWidget()
+        info_layout = QVBoxLayout(self.info_tab)
         info_layout.setContentsMargins(12, 12, 12, 12)
 
         self.info_text = QLabel()
@@ -468,12 +491,14 @@ class TranscriptViewWidget(QWidget):
         info_layout.addWidget(self.info_text)
         info_layout.addStretch()
 
-        self.tab_widget.addTab(info_tab, tr("Информация"))
+        self.tab_widget.addTab(self.info_tab, tr("Информация"))
+        self.tab_widget.currentChanged.connect(self._on_tab_changed)
 
-    def _create_section(self, title: str) -> QFrame:
+    def _create_section(self, title: str, accent: str = ACCENT_SECONDARY) -> QFrame:
         frame = QFrame()
+        frame.setObjectName("summarySectionCard")
         frame.setStyleSheet(f"""
-            QFrame {{
+            QFrame#summarySectionCard {{
                 background-color: {BG_SURFACE_2};
                 border-radius: {RADIUS_LG}px;
             }}
@@ -485,12 +510,39 @@ class TranscriptViewWidget(QWidget):
 
         title_label = QLabel(title)
         title_label.setStyleSheet(f"""
-            font-size: 15px; font-weight: 600; color: {ACCENT_SECONDARY};
+            font-size: 15px; font-weight: 600; color: {accent};
             background: transparent;
         """)
         layout.addWidget(title_label)
 
         return frame
+
+    def _create_metric_card(self, title: str, accent: str) -> tuple[QFrame, QLabel]:
+        frame = QFrame()
+        frame.setObjectName("summaryMetricCard")
+        frame.setStyleSheet(f"""
+            QFrame#summaryMetricCard {{
+                background-color: {BG_SURFACE_2};
+                border-radius: {RADIUS_LG}px;
+                border: 1px solid {BORDER_SUBTLE};
+            }}
+        """)
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(18, 14, 18, 14)
+        layout.setSpacing(2)
+
+        value_label = QLabel("0")
+        value_label.setStyleSheet(
+            f"font-size: 26px; font-weight: 700; color: {accent}; background: transparent;"
+        )
+        layout.addWidget(value_label)
+
+        title_label = QLabel(title)
+        title_label.setStyleSheet(
+            f"font-size: 12px; color: {TEXT_SECONDARY}; background: transparent;"
+        )
+        layout.addWidget(title_label)
+        return frame, value_label
 
     def set_recording(
         self,
@@ -505,6 +557,7 @@ class TranscriptViewWidget(QWidget):
         self._segments = segments
         self._summary = summary
         self._processing_job = processing_job
+        self._transcript_rendered = False
 
         self.title_label.setText(display_recording_title(recording))
         self.export_button.setEnabled(transcript is not None)
@@ -531,10 +584,21 @@ class TranscriptViewWidget(QWidget):
         self.summary_hint_label.setVisible(can_generate_summary)
         self.summary_hint_label.setText(self._build_summary_hint())
 
-        self._load_audio()
-        self._update_transcript_view()
+        # Loading Qt Multimedia and rendering a long transcript can both block
+        # the GUI thread. Prepare lightweight state here and defer the expensive
+        # work until the user explicitly opens the transcript or presses Play.
+        self._prepare_audio_ui()
+        self.transcript_text.setHtml(
+            f'<p style="color: {TEXT_TERTIARY}; text-align: center; margin-top: 40px;">'
+            f'{tr("Откройте вкладку транскрипта, чтобы загрузить текст")}</p>'
+        )
         self._update_summary_view()
         self._update_info_view()
+
+        if transcript is not None or summary is not None:
+            self.tab_widget.setCurrentWidget(self.summary_tab)
+        else:
+            self.tab_widget.setCurrentWidget(self.transcript_tab)
 
     def clear(self):
         self._recording = None
@@ -542,6 +606,7 @@ class TranscriptViewWidget(QWidget):
         self._segments = []
         self._summary = None
         self._processing_job = None
+        self._transcript_rendered = False
 
         self._clear_player_source()
         self.player_frame.setVisible(False)
@@ -559,7 +624,25 @@ class TranscriptViewWidget(QWidget):
         self.key_points_text.setText("")
         self.decisions_text.setText("")
         self.action_items_text.setText("")
+        self.decisions_count_label.setText("0")
+        self.actions_count_label.setText("0")
         self.info_text.setText("")
+
+    def _on_tab_changed(self, _index: int) -> None:
+        if self.tab_widget.currentWidget() is not self.transcript_tab:
+            return
+        if self._transcript_rendered:
+            return
+
+        # Yield once so the selected tab can paint before a large rich-text
+        # document is constructed.
+        QTimer.singleShot(0, self._render_transcript_if_needed)
+
+    def _render_transcript_if_needed(self) -> None:
+        if self._transcript_rendered or self.tab_widget.currentWidget() is not self.transcript_tab:
+            return
+        self._transcript_rendered = True
+        self._update_transcript_view()
 
     def _update_transcript_view(self):
         if not self._transcript:
@@ -616,24 +699,30 @@ class TranscriptViewWidget(QWidget):
             self.key_points_text.setText("")
             self.decisions_text.setText("")
             self.action_items_text.setText("")
+            self.decisions_count_label.setText("0")
+            self.actions_count_label.setText("0")
             return
 
         self.summary_text.setText(self._summary.summary or "")
+        decisions = self._summary.decisions or []
+        action_items = self._summary.action_items or []
+        self.decisions_count_label.setText(str(len(decisions)))
+        self.actions_count_label.setText(str(len(action_items)))
 
         if self._summary.key_points:
-            points = "\n".join(f"  •  {p}" for p in self._summary.key_points)
+            points = "\n\n".join(f"•  {p}" for p in self._summary.key_points)
             self.key_points_text.setText(points)
         else:
             self.key_points_text.setText(tr("Нет ключевых тем"))
 
-        if self._summary.decisions:
-            decisions = "\n".join(f"  •  {d}" for d in self._summary.decisions)
-            self.decisions_text.setText(decisions)
+        if decisions:
+            decision_text = "\n\n".join(f"✓  {item}" for item in decisions)
+            self.decisions_text.setText(decision_text)
         else:
             self.decisions_text.setText(tr("Решения не зафиксированы"))
 
-        if self._summary.action_items:
-            items = "\n".join(f"  •  {i}" for i in self._summary.action_items)
+        if action_items:
+            items = "\n\n".join(f"☐  {item}" for item in action_items)
             self.action_items_text.setText(items)
         else:
             self.action_items_text.setText(tr("Нет задач"))
@@ -849,13 +938,49 @@ class TranscriptViewWidget(QWidget):
         self._player.positionChanged.connect(self._on_position_changed)
         self._player.durationChanged.connect(self._on_duration_changed)
         self._player.playbackStateChanged.connect(self._on_playback_state_changed)
+        self._player.mediaStatusChanged.connect(self._on_media_status_changed)
         return self._player
 
     def _clear_player_source(self):
         if self._player is None:
+            self._audio_source_path = None
+            self._pending_audio_play = False
             return
         self._player.stop()
         self._player.setSource(QUrl())
+        self._audio_source_path = None
+        self._pending_audio_play = False
+
+    def _prepare_audio_ui(self):
+        """Show cheap audio metadata without initializing Qt Multimedia."""
+        # Stopping is cheap, while clearing a WAV source can make some Windows
+        # multimedia backends inspect the old file synchronously. Keep the old
+        # source detached logically and replace it only after Play is clicked.
+        if self._player is not None:
+            self._player.stop()
+        self._audio_source_path = None
+        self._pending_audio_play = False
+        self.play_button.setText("▶")
+        self.play_button.setEnabled(True)
+        self.time_label.setText("0:00")
+        self.progress_slider.setValue(0)
+
+        if not self._recording or not self._recording.audio_path:
+            self.player_frame.setVisible(False)
+            return
+
+        audio_path = Path(self._recording.audio_path)
+        if not audio_path.is_absolute():
+            audio_path = Path.cwd() / audio_path
+
+        if not audio_path.exists():
+            self.player_frame.setVisible(False)
+            return
+
+        duration_seconds = int(self._recording.duration_seconds or 0)
+        self.progress_slider.setRange(0, max(0, duration_seconds * 1000))
+        self.duration_label.setText(self._format_time(duration_seconds * 1000))
+        self.player_frame.setVisible(True)
 
     def _load_audio(self):
         if not self._recording or not self._recording.audio_path:
@@ -869,6 +994,7 @@ class TranscriptViewWidget(QWidget):
 
         if audio_path.exists():
             self._ensure_player().setSource(QUrl.fromLocalFile(str(audio_path)))
+            self._audio_source_path = audio_path
             self.player_frame.setVisible(True)
         else:
             self._clear_player_source()
@@ -878,10 +1004,33 @@ class TranscriptViewWidget(QWidget):
         from PyQt6.QtMultimedia import QMediaPlayer
 
         player = self._ensure_player()
+        if self._audio_source_path is None:
+            self._pending_audio_play = True
+            self.play_button.setText("…")
+            self.play_button.setEnabled(False)
+            # Allow the loading state to paint before the multimedia backend is
+            # asked to inspect a potentially large WAV file.
+            QTimer.singleShot(0, self._load_audio)
+            return
+
         if player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             player.pause()
         else:
             player.play()
+
+    def _on_media_status_changed(self, status):
+        from PyQt6.QtMultimedia import QMediaPlayer
+
+        if status == QMediaPlayer.MediaStatus.LoadedMedia:
+            self.play_button.setEnabled(True)
+            self.play_button.setText("▶")
+            if self._pending_audio_play:
+                self._pending_audio_play = False
+                self._player.play()
+        elif status == QMediaPlayer.MediaStatus.InvalidMedia:
+            self._pending_audio_play = False
+            self.play_button.setEnabled(True)
+            self.play_button.setText("▶")
 
     def _on_playback_state_changed(self, state):
         from PyQt6.QtMultimedia import QMediaPlayer
@@ -985,6 +1134,7 @@ class TranscriptViewWidget(QWidget):
         self._segments = segments
         self._summary = summary
         self._processing_job = processing_job
+        self._transcript_rendered = True
 
         self._clear_player_source()
         self.player_frame.setVisible(False)
@@ -1018,6 +1168,11 @@ class TranscriptViewWidget(QWidget):
 
         self._update_summary_view()
         self._update_info_view()
+
+        if transcript is not None or summary is not None:
+            self.tab_widget.setCurrentWidget(self.summary_tab)
+        else:
+            self.tab_widget.setCurrentWidget(self.transcript_tab)
 
         self.progress_label.setText(tr("Аудиофайл не найден. Хотите удалить запись из истории?"))
         self.progress_bar.setVisible(False)

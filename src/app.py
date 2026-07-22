@@ -7,7 +7,7 @@ from typing import Optional
 
 from loguru import logger
 
-from src.utils.config import get_settings
+from src.utils.config import get_settings, reload_settings
 from src.utils.logger import setup_logger
 
 
@@ -79,6 +79,19 @@ class MeetingNoteApp:
 
         # Set dark theme
         self._set_dark_theme()
+
+        # Make the first successful recording predictable for new users.
+        if not self.settings.onboarding_completed:
+            from src.ui.onboarding_dialog import OnboardingDialog
+
+            onboarding = OnboardingDialog()
+            quit_on_last_window = self._app.quitOnLastWindowClosed()
+            self._app.setQuitOnLastWindowClosed(False)
+            try:
+                onboarding.exec()
+            finally:
+                self._app.setQuitOnLastWindowClosed(quit_on_last_window)
+            self.settings = reload_settings()
 
         # Create main window
         import_started_at = time.perf_counter()
