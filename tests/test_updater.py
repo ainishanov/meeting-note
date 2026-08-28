@@ -3,10 +3,15 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from pathlib import Path
+from urllib.error import URLError
 
 from src.utils.updater import (
+    UpdateFailureKind,
+    UpdatePipelineError,
+    UpdateStage,
     _find_checksum,
     _version_tuple,
+    check_for_update,
     download_verified_update,
     parse_release,
     should_check_for_updates,
@@ -84,16 +89,80 @@ class UpdaterTest(unittest.TestCase):
                 Response(b"payload"),
             ]
             with patch("urllib.request.urlopen", side_effect=responses):
-                with self.assertRaises(InterruptedError):
+                with self.assertRaises(UpdatePipelineError) as raised:
                     download_verified_update(
                         update,
                         Path(directory),
                         cancel_requested=lambda: True,
                     )
 
+            self.assertEqual(raised.exception.failure.stage, UpdateStage.DOWNLOAD)
+            self.assertEqual(
+                raised.exception.failure.kind,
+                UpdateFailureKind.CANCELLED,
+            )
             self.assertFalse(
                 (Path(directory) / "MeetingNoteSetup-v0.3.0.exe.part").exists()
             )
+
+    def test_release_check_network_failure_has_explicit_stage(self):
+        with patch("urllib.request.urlopen", side_effect=URLError("offline")):
+            with self.assertRaises(UpdatePipelineError) as raised:
+                check_for_update("0.2.0")
+
+        failure = raised.exception.failure
+        self.assertEqual(failure.stage, UpdateStage.CHECK)
+        self.assertEqual(failure.kind, UpdateFailureKind.NETWORK)
+        self.assertTrue(failure.retryable)
+
+    def test_checksum_network_failure_is_not_reported_as_launch_failure(self):
+        update = parse_release(self._release(), "0.2.0")
+        self.assertIsNotNone(update)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("urllib.request.urlopen", side_effect=URLError("offline")):
+                with self.assertRaises(UpdatePipelineError) as raised:
+                    download_verified_update(update, Path(directory))
+
+        failure = raised.exception.failure
+        self.assertEqual(failure.stage, UpdateStage.CHECKSUM)
+        self.assertEqual(failure.kind, UpdateFailureKind.NETWORK)
+
+    def test_hash_mismatch_is_integrity_failure_and_deletes_download(self):
+        update = parse_release(self._release(), "0.2.0")
+        self.assertIsNotNone(update)
+
+        class Response:
+            def __init__(self, content):
+                self.content = content
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self, _size=-1):
+                content, self.content = self.content, b""
+                return content
+
+        with tempfile.TemporaryDirectory() as directory:
+            responses = [
+                Response(f"{'A' * 64} *{update.asset.name}\n".encode()),
+                Response(b"payload"),
+            ]
+            with patch("urllib.request.urlopen", side_effect=responses):
+                with self.assertRaises(UpdatePipelineError) as raised:
+                    download_verified_update(update, Path(directory))
+
+            self.assertFalse((Path(directory) / update.asset.name).exists())
+            self.assertFalse(
+                (Path(directory) / f"{update.asset.name}.part").exists()
+            )
+
+        failure = raised.exception.failure
+        self.assertEqual(failure.stage, UpdateStage.VERIFY)
+        self.assertEqual(failure.kind, UpdateFailureKind.INTEGRITY)
 
 
 if __name__ == "__main__":

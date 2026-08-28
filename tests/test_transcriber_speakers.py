@@ -1,4 +1,14 @@
+import base64
+import io
+import tempfile
 import unittest
+import wave
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import numpy as np
+from pydub import AudioSegment
 
 from src.core.database import TranscriptSegment
 from src.core.transcriber import Transcriber
@@ -28,68 +38,252 @@ class TranscriberSpeakerNormalizationTest(unittest.TestCase):
             "Speaker 1",
         )
 
-    def test_assigns_stable_labels_inside_first_diarized_chunk(self):
+    def test_assigns_stable_labels_for_whole_recording(self):
         segments = [
             segment("A", 0.0, 2.0, "Начинаем встречу"),
             segment("B", 3.0, 5.0, "Подтверждаю план"),
             segment("A", 6.0, 8.0, "Тогда идем дальше"),
         ]
 
-        next_speaker = self.transcriber._normalize_diarized_chunk_speakers(
-            segments,
-            previous_segments=[],
-            chunk_output_start=0.0,
-            next_speaker_number=1,
-        )
+        self.transcriber._normalize_global_speaker_labels(segments)
 
         self.assertEqual([item.speaker for item in segments], [
             "Speaker 1",
             "Speaker 2",
             "Speaker 1",
         ])
-        self.assertEqual(next_speaker, 3)
 
-    def test_maps_next_chunk_speaker_when_overlap_matches(self):
-        previous_segments = [
-            segment("Speaker 1", 586.0, 590.0, "обсуждаем договор поставки"),
+    def test_builds_api_compatible_speaker_reference(self):
+        segments = [
+            segment("A", 0.0, 1.0, "Короткая реплика"),
         ]
-        chunk_segments = [
-            segment("A", 586.0, 590.0, "обсуждаем договор поставки"),
-            segment("A", 602.0, 606.0, "продолжаю про договор"),
-            segment("B", 607.0, 610.0, "добавлю по срокам"),
-        ]
+        audio = AudioSegment.silent(duration=3000, frame_rate=16000)
 
-        next_speaker = self.transcriber._normalize_diarized_chunk_speakers(
-            chunk_segments,
-            previous_segments=previous_segments,
-            chunk_output_start=600.0,
-            next_speaker_number=2,
+        reference = self.transcriber._build_speaker_reference(
+            audio,
+            segments,
+            "A",
+            chunk_start_seconds=0.0,
         )
 
-        self.assertEqual([item.speaker for item in chunk_segments], [
-            "Speaker 1",
-            "Speaker 1",
-            "Speaker 2",
-        ])
-        self.assertEqual(next_speaker, 3)
+        prefix = "data:audio/wav;base64,"
+        self.assertTrue(reference.startswith(prefix))
+        with wave.open(io.BytesIO(base64.b64decode(reference[len(prefix) :]))) as wav:
+            self.assertEqual(wav.getnchannels(), 1)
+            self.assertEqual(wav.getframerate(), 16000)
+            self.assertGreaterEqual(wav.getnframes() / wav.getframerate(), 2.0)
+            self.assertLessEqual(wav.getnframes() / wav.getframerate(), 10.0)
 
-    def test_does_not_merge_same_raw_label_without_overlap_evidence(self):
-        previous_segments = [
-            segment("Speaker 1", 10.0, 12.0, "начали обсуждение"),
-        ]
-        chunk_segments = [
-            segment("A", 620.0, 623.0, "совсем другая часть разговора"),
-        ]
+    def test_enrolls_local_labels_and_maps_known_voice_names(self):
+        segments = [segment("A", 123.0, 126.0, "Новый голос")]
+        audio = AudioSegment.silent(duration=10000, frame_rate=16000)
+        speaker_references = {"speaker_1": "data:audio/wav;base64,known"}
 
-        next_speaker = self.transcriber._normalize_diarized_chunk_speakers(
-            chunk_segments,
-            previous_segments=previous_segments,
-            chunk_output_start=600.0,
-            next_speaker_number=2,
+        enrolled_name = self.transcriber._enroll_next_speaker(
+            segments,
+            audio,
+            chunk_start_seconds=120.0,
+            speaker_references=speaker_references,
         )
 
-        self.assertEqual(chunk_segments[0].speaker, "Speaker 2")
-        self.assertEqual(next_speaker, 3)
+        classified_segments = [
+            segment("speaker_1", 120.0, 123.0, "Уже известный голос"),
+            segment("speaker_2", 123.0, 126.0, "Новый голос"),
+        ]
+        self.transcriber._map_known_speaker_labels(
+            classified_segments,
+            speaker_references,
+        )
+
+        self.assertEqual(enrolled_name, "speaker_2")
+        self.assertEqual(
+            [item.speaker for item in classified_segments],
+            ["Speaker 1", "Speaker 2"],
+        )
+        self.assertEqual(list(speaker_references), ["speaker_1", "speaker_2"])
+
+    def test_fails_closed_instead_of_creating_fifth_speaker(self):
+        segments = [segment("A", 0.0, 3.0, "Неизвестный голос")]
+        audio = AudioSegment.silent(duration=3000, frame_rate=16000)
+        speaker_references = {
+            f"speaker_{index}": "data:audio/wav;base64,known"
+            for index in range(1, 5)
+        }
+
+        with self.assertRaisesRegex(RuntimeError, "unrecognized voice"):
+            self.transcriber._enroll_next_speaker(
+                segments,
+                audio,
+                chunk_start_seconds=0.0,
+                speaker_references=speaker_references,
+            )
+
+    def test_resolves_only_subsecond_unknown_label_to_nearest_known_turn(self):
+        segments = [
+            segment("speaker_1", 10.0, 12.0, "До"),
+            segment("A", 12.0, 12.05, "и"),
+            segment("speaker_2", 12.2, 14.0, "После"),
+        ]
+        speaker_references = {
+            f"speaker_{index}": "data:audio/wav;base64,known"
+            for index in range(1, 5)
+        }
+
+        self.transcriber._resolve_short_unknown_segments(
+            segments,
+            speaker_references,
+        )
+
+        self.assertEqual(segments[1].speaker, "speaker_1")
+
+    def test_resolves_unknown_label_below_reference_minimum(self):
+        segments = [
+            segment("speaker_1", 10.0, 12.0, "До"),
+            segment("A", 12.0, 13.7, "Слишком коротко для эталона"),
+            segment("speaker_2", 14.0, 16.0, "После"),
+        ]
+        speaker_references = {
+            f"speaker_{index}": "data:audio/wav;base64,known"
+            for index in range(1, 5)
+        }
+
+        self.transcriber._resolve_short_unknown_segments(
+            segments,
+            speaker_references,
+        )
+
+        self.assertEqual(segments[1].speaker, "speaker_1")
+
+    def test_preserves_meaningful_unknown_turn_for_profile_refresh(self):
+        segments = [
+            segment("speaker_1", 10.0, 12.0, "До"),
+            segment("A", 12.0, 15.0, "Полноценная реплика"),
+        ]
+        speaker_references = {
+            f"speaker_{index}": "data:audio/wav;base64,known"
+            for index in range(1, 5)
+        }
+
+        self.transcriber._resolve_short_unknown_segments(
+            segments,
+            speaker_references,
+        )
+
+        self.assertEqual(segments[1].speaker, "A")
+
+    def test_uses_two_minute_bounded_chunks(self):
+        self.assertEqual(self.transcriber.MAX_CHUNK_DURATION, 120)
+
+    def test_routes_long_diarization_to_chunked_pipeline(self):
+        expected = object()
+        with tempfile.NamedTemporaryFile(suffix=".wav") as audio_file:
+            with patch(
+                "scipy.io.wavfile.read",
+                return_value=(16000, np.zeros(16000 * 121, dtype=np.int16)),
+            ), patch.object(
+                self.transcriber,
+                "_transcribe_chunked",
+                return_value=expected,
+            ) as chunked:
+                result = self.transcriber.transcribe(
+                    Path(audio_file.name),
+                    language="ru",
+                    model=self.transcriber.DIARIZE_MODEL,
+                    resume_key="recording-1",
+                )
+
+        self.assertIs(result, expected)
+        chunked.assert_called_once()
+
+    def test_chunked_diarization_passes_enrolled_voices_to_next_request(self):
+        responses = [
+            SimpleNamespace(
+                text="Первый Второй",
+                language="ru",
+                segments=[
+                    SimpleNamespace(speaker="A", start=0.0, end=1.0, text="Первый"),
+                    SimpleNamespace(speaker="B", start=1.0, end=2.0, text="Второй"),
+                ],
+            ),
+            SimpleNamespace(
+                text="Первый Второй",
+                language="ru",
+                segments=[
+                    SimpleNamespace(
+                        speaker="speaker_1", start=0.0, end=1.0, text="Первый"
+                    ),
+                    SimpleNamespace(speaker="B", start=1.0, end=2.0, text="Второй"),
+                ],
+            ),
+            SimpleNamespace(
+                text="Первый Второй",
+                language="ru",
+                segments=[
+                    SimpleNamespace(
+                        speaker="speaker_1", start=0.0, end=1.0, text="Первый"
+                    ),
+                    SimpleNamespace(
+                        speaker="speaker_2", start=1.0, end=2.0, text="Второй"
+                    ),
+                ],
+            ),
+            SimpleNamespace(
+                text="Снова первый и второй",
+                language="ru",
+                segments=[
+                    SimpleNamespace(
+                        speaker="speaker_1", start=0.0, end=1.0, text="Снова первый"
+                    ),
+                    SimpleNamespace(
+                        speaker="speaker_2", start=1.0, end=2.0, text="и второй"
+                    ),
+                ],
+            ),
+        ]
+        requests = []
+
+        def create(**kwargs):
+            requests.append(kwargs)
+            return responses[len(requests) - 1]
+
+        client = SimpleNamespace(
+            audio=SimpleNamespace(
+                transcriptions=SimpleNamespace(create=create),
+            )
+        )
+        self.transcriber.MAX_CHUNK_DURATION = 2
+        audio = AudioSegment.silent(duration=4000, frame_rate=16000)
+
+        with patch("src.core.transcriber.AudioSegment.from_file", return_value=audio), patch.object(
+            self.transcriber, "_is_silent_chunk", return_value=False
+        ), patch.object(self.transcriber, "_get_client", return_value=client):
+            result = self.transcriber._transcribe_chunked(
+                Path(__file__),
+                language="ru",
+                duration_seconds=4.0,
+                model=self.transcriber.DIARIZE_MODEL,
+            )
+
+        self.assertNotIn("known_speaker_names", requests[0])
+        self.assertEqual(
+            requests[1]["known_speaker_names"], ["speaker_1"]
+        )
+        self.assertEqual(
+            requests[2]["known_speaker_names"],
+            ["speaker_1", "speaker_2"],
+        )
+        self.assertEqual(
+            requests[3]["known_speaker_names"],
+            ["speaker_1", "speaker_2"],
+        )
+        self.assertEqual(len(requests[3]["known_speaker_references"]), 2)
+        self.assertEqual(
+            [item.speaker for item in result.segments],
+            ["Speaker 1", "Speaker 2", "Speaker 1", "Speaker 2"],
+        )
+
+    def test_disables_nested_sdk_retries(self):
+        self.assertEqual(self.transcriber._get_client().max_retries, 0)
 
 
 class LegacySpeakerLabelDetectionTest(unittest.TestCase):
@@ -118,6 +312,20 @@ class LegacySpeakerLabelDetectionTest(unittest.TestCase):
                 duration_seconds=1200,
             )
         )
+
+
+class ProcessingErrorFormattingTest(unittest.TestCase):
+    def test_connection_error_preserves_recording_and_gives_next_action(self):
+        with patch("src.ui.i18n.current_language", return_value="ru"):
+            message = MainWindow._format_processing_error(
+                None,
+                Exception("Connection error."),
+                "transcription",
+            )
+
+        self.assertIn("Запись сохранена", message)
+        self.assertIn("Повторите транскрибацию", message)
+        self.assertIn("VPN", message)
 
 
 if __name__ == "__main__":

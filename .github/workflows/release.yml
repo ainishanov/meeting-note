@@ -12,11 +12,11 @@ permissions:
   contents: write
 
 env:
-  RELEASE_VERSION: "0.3.1"
+  RELEASE_VERSION: "0.3.2"
 
 jobs:
   publish:
-    name: Build and publish v0.3.1
+    name: Build and publish v0.3.2
     runs-on: windows-latest
     timeout-minutes: 30
 
@@ -53,7 +53,7 @@ jobs:
 
       - name: Build Windows executable
         shell: pwsh
-        run: python -m PyInstaller --noconfirm --distpath dist --workpath build/pyinstaller MeetingNote.spec
+        run: python scripts/build_windows.py --distpath dist --workpath build/pyinstaller
 
       - name: Prepare optional signing certificate
         id: signing
@@ -134,17 +134,12 @@ jobs:
 
           Highlights
 
-          - The Windows UI now uses the LGPL-licensed Qt for Python bindings, keeping the app's MIT licensing clear.
-          - Release dependencies are version-locked and verified with SHA-256 hashes.
-          - Code-signing policy and third-party notices are included with the distribution.
-          - Open meetings instantly: audio and transcript content now load only when needed.
-          - See the outcome first: Summary is the default view, with decisions and tasks at the top.
-          - Find meetings faster with semantic titles and automatic history backfill.
-          - Complete a focused four-step setup with microphone and system-audio checks.
-          - Use the compact recording bar and the new call-detected prompt.
-          - Send feedback, report bugs, or request features from inside the app.
-          - Install with a normal Windows setup wizard and check for verified updates in the app.
-          - Choose whether to share anonymous funnel events and privacy-scrubbed crash reports.
+          - Keep four speakers stable across long recordings with adaptive voice references.
+          - Resume long transcriptions from an atomic chunk cache after network failures.
+          - See the exact failed update stage and retry the correct action.
+          - Follow visible download progress and install only after SHA-256 verification.
+          - Build from locked dependencies and reject DLLs outside trusted roots.
+          - Recover from a damaged GUI runtime with a direct download prompt.
 
           Privacy
 
@@ -198,17 +193,12 @@ jobs:
           @"
           ## What changed
 
-          - Migrated the Windows UI from PyQt6 to the LGPL-licensed Qt for Python bindings while preserving behavior.
-          - Locked release dependencies with SHA-256 hashes for reproducible signing inputs.
-          - Added the public code-signing policy and bundled third-party notices.
-          - Meeting selection is now instant because audio and transcript data load only when opened.
-          - Summary opens first and puts decisions, tasks, and meeting metrics before the full transcript.
-          - Semantic titles and history backfill make old and new meetings easier to find.
-          - A focused four-step onboarding checks the microphone and system-audio setup.
-          - The recording experience now uses a compact bar and a clear call-detected prompt.
-          - Feedback, bug reports, and feature requests are available inside the app.
-          - Anonymous product milestones and privacy-scrubbed crash reports are opt-in.
-          - A verified in-app update check now finds and downloads future releases.
+          - Speaker identities now remain stable across long chunked transcriptions by using adaptive voice references instead of request-local labels.
+          - Long transcriptions resume from an atomic per-chunk cache after network failures without repeating completed API work.
+          - Update failures now identify the exact check, download, verification, save, or launch stage and offer the matching recovery action.
+          - Update downloads show progress, remove partial files on cancellation, and require SHA-256 verification before installation.
+          - Windows builds now enforce locked dependencies, trusted DLL sources, and a frozen-runtime smoke test.
+          - A damaged GUI runtime shows a native recovery prompt with a direct route to the latest release.
 
           ## Download
 

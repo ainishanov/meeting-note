@@ -1754,7 +1754,7 @@ class MainWindow(QMainWindow):
         lower = raw.lower()
         if "openrouter" in lower:
             service = "OpenRouter"
-        elif "openai" in lower:
+        elif "openai" in lower or kind == "transcription":
             service = "OpenAI"
         elif "429" in lower or "rate limit" in lower:
             service = tr("провайдера API")
@@ -1771,6 +1771,20 @@ class MainWindow(QMainWindow):
             return (
                 f"{service} temporarily limited requests. "
                 + tr("Повторить позже или выберите другую модель.")
+            )
+        if (
+            "connection error" in lower
+            or "connectionerror" in lower
+            or "timed out" in lower
+            or "timeout" in lower
+        ):
+            if kind == "transcription":
+                return tr(
+                    "Связь с OpenAI прервалась. Запись сохранена. Повторите транскрибацию; если ошибка повторится, проверьте VPN и интернет."
+                )
+            return tr(
+                "Связь с {service} прервалась. Текст записи сохранён. Повторите саммари; если ошибка повторится, проверьте VPN и интернет.",
+                service=service,
             )
         if "json" in lower or "unterminated" in lower:
             return tr("Модель вернула неполный JSON. Текст записи сохранён; повторите саммари, приложение попробует chunked-обработку.")

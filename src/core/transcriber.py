@@ -1,6 +1,7 @@
 """OpenAI GPT-4o Transcribe API integration with speaker diarization."""
 
 import asyncio
+import base64
 import io
 import json
 import math
@@ -65,13 +66,12 @@ class Transcriber:
     - Hallucination filtering
     """
 
-    # OpenAI Whisper/GPT-4o has 25MB file limit
+    # The Transcriptions API accepts files up to 25 MB.
     MAX_FILE_SIZE_MB = 25
-    # Maximum audio duration per chunk (in seconds)
-    MAX_CHUNK_DURATION = 600  # 10 minutes
-    # Extra audio to include before each diarized chunk so we can match speaker
-    # labels at chunk boundaries instead of treating local A/B labels as global.
-    DIARIZE_CHUNK_OVERLAP_SECONDS = 30
+    # Keep each upload small enough to survive slow or unstable connections.
+    # Two minutes of 16 kHz mono PCM is about 3.7 MiB; larger real-world chunks
+    # repeatedly lost the connection before diarization returned a response.
+    MAX_CHUNK_DURATION = 120  # 2 minutes
     # Minimum RMS level for audio to be considered non-silent
     # Values below this threshold are likely silence or very quiet noise
     MIN_RMS_THRESHOLD = 500
@@ -80,7 +80,12 @@ class Transcriber:
     DEFAULT_MODEL = "gpt-4o-mini-transcribe"
     DIARIZE_MODEL = "gpt-4o-transcribe-diarize"
     WHISPER_MODEL = "whisper-1"
-    SPEAKER_MATCH_MIN_SCORE = 0.35
+    DIARIZATION_PIPELINE_VERSION = 2
+    MAX_KNOWN_SPEAKERS = 4
+    MIN_SPEAKER_REFERENCE_SECONDS = 2.0
+    TARGET_SPEAKER_REFERENCE_SECONDS = 4.0
+    MAX_SPEAKER_REFERENCE_SECONDS = 10.0
+    MAX_SHORT_UNKNOWN_SECONDS = MIN_SPEAKER_REFERENCE_SECONDS
 
     def __init__(self, api_key: Optional[str] = None):
         """
@@ -107,7 +112,10 @@ class Transcriber:
                     "Set OPENAI_API_KEY environment variable or configure in settings."
                 )
 
-            self._client = OpenAI(api_key=api_key)
+            # Retry here, where chunk progress and durable cache state are known.
+            # The SDK otherwise retries inside every application-level attempt,
+            # making one failed chunk appear frozen for several minutes.
+            self._client = OpenAI(api_key=api_key, max_retries=0)
 
         return self._client
 
@@ -217,130 +225,296 @@ class Transcriber:
         label = re.sub(r"\s+", " ", label)
         return label[:60]
 
-    def _normalize_speaker_text(self, text: str) -> set[str]:
-        words = re.findall(r"[\wа-яё]+", text.lower(), re.UNICODE)
-        return {word for word in words if len(word) > 2}
-
-    def _speaker_text_similarity(self, left: str, right: str) -> float:
-        left_words = self._normalize_speaker_text(left)
-        right_words = self._normalize_speaker_text(right)
-        if not left_words or not right_words:
-            return 0.0
-
-        intersection = left_words & right_words
-        union = left_words | right_words
-        return len(intersection) / len(union)
-
-    def _build_overlap_speaker_map(
-        self,
-        previous_segments: list[TranscriptSegment],
-        chunk_segments: list[TranscriptSegment],
-        chunk_output_start: float,
-    ) -> dict[str, str]:
-        """Map chunk-local speaker labels to existing global labels using overlap."""
-        if not previous_segments or not chunk_segments:
-            return {}
-
-        overlap_start = max(
-            0.0, chunk_output_start - self.DIARIZE_CHUNK_OVERLAP_SECONDS
-        )
-        previous_overlap = [
-            segment
-            for segment in previous_segments
-            if segment.speaker
-            and segment.end_time >= overlap_start
-            and segment.start_time <= chunk_output_start + 2.0
-        ]
-        current_overlap = [
-            segment
-            for segment in chunk_segments
-            if segment.speaker
-            and segment.end_time >= overlap_start
-            and segment.start_time <= chunk_output_start + 2.0
-        ]
-
-        scores: dict[tuple[str, str], float] = {}
-        for current in current_overlap:
-            for previous in previous_overlap:
-                current_speaker = current.speaker
-                previous_speaker = previous.speaker
-                if not current_speaker or not previous_speaker:
-                    continue
-
-                time_overlap = max(
-                    0.0,
-                    min(current.end_time, previous.end_time)
-                    - max(current.start_time, previous.start_time),
-                )
-                current_mid = (current.start_time + current.end_time) / 2
-                previous_mid = (previous.start_time + previous.end_time) / 2
-                time_proximity = 1 / (1 + abs(current_mid - previous_mid))
-                text_similarity = self._speaker_text_similarity(
-                    current.text, previous.text
-                )
-                if time_overlap <= 0 and text_similarity < 0.15:
-                    continue
-
-                score = time_overlap + (time_proximity * 0.5) + (
-                    2 * text_similarity
-                )
-
-                if score <= 0:
-                    continue
-
-                key = (current_speaker, previous_speaker)
-                scores[key] = scores.get(key, 0.0) + score
-
+    def _normalize_global_speaker_labels(
+        self, segments: list[TranscriptSegment]
+    ) -> None:
+        """Rename one request's stable A/B labels in first-seen order."""
         speaker_map: dict[str, str] = {}
-        used_global_speakers: set[str] = set()
-        ranked_scores = sorted(scores.items(), key=lambda item: item[1], reverse=True)
-        for (local_speaker, global_speaker), score in ranked_scores:
-            if score < self.SPEAKER_MATCH_MIN_SCORE:
+        for segment in segments:
+            if not segment.speaker:
                 continue
-            if local_speaker in speaker_map or global_speaker in used_global_speakers:
-                continue
-            speaker_map[local_speaker] = global_speaker
-            used_global_speakers.add(global_speaker)
+            if segment.speaker not in speaker_map:
+                speaker_map[segment.speaker] = f"Speaker {len(speaker_map) + 1}"
+            segment.speaker = speaker_map[segment.speaker]
 
-        return speaker_map
+    def _speaker_display_name(self, api_name: str) -> str:
+        match = re.fullmatch(r"speaker_(\d+)", api_name)
+        if match:
+            return f"Speaker {match.group(1)}"
+        return api_name
 
-    def _normalize_diarized_chunk_speakers(
+    def _speaker_api_name(self, display_name: str) -> str:
+        match = re.fullmatch(r"Speaker (\d+)", display_name)
+        if match:
+            return f"speaker_{match.group(1)}"
+        return display_name
+
+    def _build_speaker_reference(
         self,
-        chunk_segments: list[TranscriptSegment],
-        previous_segments: list[TranscriptSegment],
-        chunk_output_start: float,
-        next_speaker_number: int,
-    ) -> int:
-        """
-        Convert model-local diarization labels into transcript-level labels.
-
-        The diarize API returns labels such as A/B per request. When long audio is
-        split, those labels are only reliable inside that chunk. We reuse a prior
-        global speaker only when the overlap proves the mapping.
-        """
-        speaker_map = self._build_overlap_speaker_map(
-            previous_segments, chunk_segments, chunk_output_start
+        chunk: AudioSegment,
+        segments: list[TranscriptSegment],
+        local_speaker: str,
+        chunk_start_seconds: float,
+    ) -> str:
+        """Create a 2-10 second WAV data URL containing one enrolled voice."""
+        matching_segments = [
+            segment
+            for segment in segments
+            if segment.speaker == local_speaker
+        ]
+        matching_segments.sort(
+            key=lambda segment: segment.end_time - segment.start_time,
+            reverse=True,
         )
 
-        local_to_global = dict(speaker_map)
-        for segment in chunk_segments:
-            local_speaker = segment.speaker
-            if not local_speaker:
+        max_duration_ms = int(self.MAX_SPEAKER_REFERENCE_SECONDS * 1000)
+        min_duration_ms = int(self.MIN_SPEAKER_REFERENCE_SECONDS * 1000)
+        target_duration_ms = int(self.TARGET_SPEAKER_REFERENCE_SECONDS * 1000)
+        reference = AudioSegment.empty()
+        for segment in matching_segments:
+            start_ms = max(
+                0,
+                int((segment.start_time - chunk_start_seconds) * 1000),
+            )
+            end_ms = min(
+                len(chunk),
+                int((segment.end_time - chunk_start_seconds) * 1000),
+            )
+            if end_ms <= start_ms:
+                continue
+            segment_duration_ms = end_ms - start_ms
+            if segment_duration_ms >= min_duration_ms:
+                extract_duration_ms = min(
+                    target_duration_ms,
+                    segment_duration_ms,
+                )
+                midpoint_ms = (start_ms + end_ms) // 2
+                extract_start_ms = max(
+                    start_ms,
+                    midpoint_ms - extract_duration_ms // 2,
+                )
+                extract_end_ms = min(
+                    end_ms,
+                    extract_start_ms + extract_duration_ms,
+                )
+                reference = chunk[extract_start_ms:extract_end_ms]
+                break
+
+            remaining_ms = min(target_duration_ms, max_duration_ms) - len(reference)
+            if remaining_ms <= 0:
+                break
+            reference += chunk[start_ms : min(end_ms, start_ms + remaining_ms)]
+            if len(reference) >= min_duration_ms:
+                break
+
+        if not reference:
+            raise RuntimeError(
+                f"Could not create an audio reference for speaker {local_speaker}"
+            )
+
+        if len(reference) < min_duration_ms:
+            reference += AudioSegment.silent(
+                duration=min_duration_ms - len(reference),
+                frame_rate=reference.frame_rate,
+            )
+
+        reference = (
+            reference[:max_duration_ms]
+            .set_channels(1)
+            .set_frame_rate(16000)
+            .set_sample_width(2)
+        )
+        buffer = io.BytesIO()
+        reference.export(buffer, format="wav")
+        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+        return f"data:audio/wav;base64,{encoded}"
+
+    def _unknown_speaker_labels(
+        self,
+        segments: list[TranscriptSegment],
+        speaker_references: dict[str, str],
+    ) -> list[str]:
+        """Return request-local labels not matched to an enrolled voice."""
+        return list(
+            dict.fromkeys(
+                segment.speaker
+                for segment in segments
+                if segment.speaker
+                and segment.speaker not in speaker_references
+            )
+        )
+
+    def _resolve_short_unknown_segments(
+        self,
+        segments: list[TranscriptSegment],
+        speaker_references: dict[str, str],
+    ) -> None:
+        """Attach labels too short for a valid voice sample to a known turn."""
+        unknown_labels = self._unknown_speaker_labels(
+            segments,
+            speaker_references,
+        )
+        for unknown_label in unknown_labels:
+            unknown_indexes = [
+                index
+                for index, segment in enumerate(segments)
+                if segment.speaker == unknown_label
+            ]
+            total_seconds = sum(
+                max(0.0, segments[index].end_time - segments[index].start_time)
+                for index in unknown_indexes
+            )
+            if total_seconds > self.MAX_SHORT_UNKNOWN_SECONDS:
                 continue
 
-            if local_speaker not in local_to_global:
-                local_to_global[local_speaker] = f"Speaker {next_speaker_number}"
-                next_speaker_number += 1
+            for index in unknown_indexes:
+                current = segments[index]
+                previous = next(
+                    (
+                        candidate
+                        for candidate in reversed(segments[:index])
+                        if candidate.speaker in speaker_references
+                    ),
+                    None,
+                )
+                following = next(
+                    (
+                        candidate
+                        for candidate in segments[index + 1 :]
+                        if candidate.speaker in speaker_references
+                    ),
+                    None,
+                )
+                if previous is not None and following is not None:
+                    previous_gap = abs(current.start_time - previous.end_time)
+                    following_gap = abs(following.start_time - current.end_time)
+                    current.speaker = (
+                        previous.speaker
+                        if previous_gap <= following_gap
+                        else following.speaker
+                    )
+                elif previous is not None:
+                    current.speaker = previous.speaker
+                elif following is not None:
+                    current.speaker = following.speaker
 
-            segment.speaker = local_to_global[local_speaker]
+    def _enroll_next_speaker(
+        self,
+        segments: list[TranscriptSegment],
+        chunk: AudioSegment,
+        chunk_start_seconds: float,
+        speaker_references: dict[str, str],
+        replace_api_name: Optional[str] = None,
+    ) -> str:
+        """Enroll the dominant currently unknown voice for another model pass."""
+        unknown_labels = self._unknown_speaker_labels(
+            segments,
+            speaker_references,
+        )
+        if not unknown_labels:
+            raise RuntimeError("No unknown speaker is available to enroll")
+        if (
+            replace_api_name is None
+            and len(speaker_references) >= self.MAX_KNOWN_SPEAKERS
+        ):
+            unknown_seconds = {
+                label: round(
+                    sum(
+                        max(0.0, segment.end_time - segment.start_time)
+                        for segment in segments
+                        if segment.speaker == label
+                    ),
+                    2,
+                )
+                for label in unknown_labels
+            }
+            logger.error(
+                f"Unrecognized diarization labels after enrollment: {unknown_seconds}"
+            )
+            raise RuntimeError(
+                "Speaker diarization found an unrecognized voice after "
+                f"enrolling {self.MAX_KNOWN_SPEAKERS} speakers. The recording "
+                "was preserved; no duplicate speaker labels were saved."
+            )
 
-        return next_speaker_number
+        speaking_seconds = {
+            label: sum(
+                max(0.0, segment.end_time - segment.start_time)
+                for segment in segments
+                if segment.speaker == label
+            )
+            for label in unknown_labels
+        }
+        local_label = max(unknown_labels, key=speaking_seconds.__getitem__)
+        api_name = replace_api_name or f"speaker_{len(speaker_references) + 1}"
+        speaker_references[api_name] = self._build_speaker_reference(
+            chunk,
+            segments,
+            local_label,
+            chunk_start_seconds,
+        )
+        return api_name
+
+    def _map_known_speaker_labels(
+        self,
+        segments: list[TranscriptSegment],
+        speaker_references: dict[str, str],
+    ) -> None:
+        """Convert provider voice-reference IDs to stable display labels."""
+        for segment in segments:
+            if segment.speaker:
+                if segment.speaker not in speaker_references:
+                    raise RuntimeError(
+                        f"Unrecognized speaker label: {segment.speaker}"
+                    )
+                segment.speaker = self._speaker_display_name(segment.speaker)
+
+    def _refresh_speaker_references(
+        self,
+        segments: list[TranscriptSegment],
+        chunk: AudioSegment,
+        chunk_start_seconds: float,
+        speaker_references: dict[str, str],
+        reference_chunks: dict[str, int],
+        chunk_number: int,
+    ) -> None:
+        """Keep enrolled voice samples current as the recording progresses."""
+        labels = list(
+            dict.fromkeys(
+                self._speaker_api_name(segment.speaker)
+                for segment in segments
+                if segment.speaker
+            )
+        )
+        for api_name in labels:
+            if api_name not in speaker_references:
+                continue
+            reference_segments = [
+                TranscriptSegment(
+                    transcript_id=segment.transcript_id,
+                    speaker=api_name,
+                    start_time=segment.start_time,
+                    end_time=segment.end_time,
+                    text=segment.text,
+                )
+                for segment in segments
+                if segment.speaker
+                and self._speaker_api_name(segment.speaker) == api_name
+            ]
+            speaker_references[api_name] = self._build_speaker_reference(
+                chunk,
+                reference_segments,
+                api_name,
+                chunk_start_seconds,
+            )
+            reference_chunks[api_name] = chunk_number
 
     def _build_transcription_params(
         self,
         model: str,
         file,
         language: Optional[str],
+        speaker_references: Optional[dict[str, str]] = None,
     ) -> dict:
         params = {
             "model": model,
@@ -353,6 +527,11 @@ class Transcriber:
         elif model == self.DIARIZE_MODEL:
             params["response_format"] = "diarized_json"
             params["chunking_strategy"] = "auto"
+            if speaker_references:
+                params["known_speaker_names"] = list(speaker_references)
+                params["known_speaker_references"] = list(
+                    speaker_references.values()
+                )
         else:
             params["response_format"] = "json"
         return {key: value for key, value in params.items() if value is not None}
@@ -395,6 +574,139 @@ class Transcriber:
             )
 
         return full_text, detected_language, segments
+
+    def _request_chunk_transcription(
+        self,
+        buffer: io.BytesIO,
+        model: str,
+        language: Optional[str],
+        chunk_number: int,
+        speaker_references: Optional[dict[str, str]] = None,
+    ):
+        """Send one bounded chunk with application-owned retry semantics."""
+        client = self._get_client()
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                buffer.seek(0)
+                return client.audio.transcriptions.create(
+                    **self._build_transcription_params(
+                        model,
+                        ("chunk.wav", buffer, "audio/wav"),
+                        language,
+                        speaker_references=speaker_references,
+                    )
+                )
+            except Exception as e:
+                if (
+                    self._is_retryable_transcription_error(e)
+                    and attempt < max_retries - 1
+                ):
+                    wait_time = 2 ** (attempt + 1)
+                    logger.warning(
+                        f"Chunk {chunk_number} attempt {attempt + 1} failed: "
+                        f"{e}. Retrying in {wait_time}s..."
+                    )
+                    time.sleep(wait_time)
+                    continue
+                logger.error(f"Failed to transcribe chunk {chunk_number}: {e}")
+                raise
+
+        raise RuntimeError(f"Chunk {chunk_number} returned no response")
+
+    def _transcribe_diarized_chunk(
+        self,
+        buffer: io.BytesIO,
+        chunk: AudioSegment,
+        language: Optional[str],
+        chunk_start_seconds: float,
+        chunk_number: int,
+        speaker_references: dict[str, str],
+        reference_chunks: dict[str, int],
+    ) -> tuple[str, str, list[TranscriptSegment]]:
+        """Enroll unknown voices one at a time, then return globally named turns."""
+        candidate_names: list[str] = []
+        max_classification_passes = self.MAX_KNOWN_SPEAKERS * 3
+        for _ in range(max_classification_passes):
+            response = self._request_chunk_transcription(
+                buffer,
+                self.DIARIZE_MODEL,
+                language,
+                chunk_number,
+                speaker_references or None,
+            )
+            chunk_text, chunk_language, segments = self._response_to_result_parts(
+                response,
+                language,
+                time_offset=chunk_start_seconds,
+            )
+            if len(speaker_references) >= self.MAX_KNOWN_SPEAKERS:
+                self._resolve_short_unknown_segments(
+                    segments,
+                    speaker_references,
+                )
+            unknown_labels = self._unknown_speaker_labels(
+                segments,
+                speaker_references,
+            )
+            if not unknown_labels:
+                self._refresh_speaker_references(
+                    segments,
+                    chunk,
+                    chunk_start_seconds,
+                    speaker_references,
+                    reference_chunks,
+                    chunk_number,
+                )
+                self._map_known_speaker_labels(segments, speaker_references)
+                return chunk_text, chunk_language, segments
+
+            used_known_names = {
+                segment.speaker
+                for segment in segments
+                if segment.speaker in speaker_references
+            }
+            replace_api_name = next(
+                (
+                    name
+                    for name in candidate_names
+                    if name not in used_known_names
+                ),
+                None,
+            )
+            if (
+                replace_api_name is None
+                and len(speaker_references) >= self.MAX_KNOWN_SPEAKERS
+            ):
+                inactive_names = [
+                    name
+                    for name in speaker_references
+                    if name not in used_known_names
+                ]
+                if inactive_names:
+                    replace_api_name = min(
+                        inactive_names,
+                        key=lambda name: reference_chunks.get(name, -1),
+                    )
+            enrolled_name = self._enroll_next_speaker(
+                segments,
+                chunk,
+                chunk_start_seconds,
+                speaker_references,
+                replace_api_name=replace_api_name,
+            )
+            reference_chunks[enrolled_name] = chunk_number
+            if replace_api_name is None:
+                candidate_names.append(enrolled_name)
+            logger.info(
+                f"{'Refined' if replace_api_name else 'Enrolled'} "
+                f"{enrolled_name} from chunk {chunk_number}; "
+                "reclassifying the chunk with voice references"
+            )
+
+        raise RuntimeError(
+            f"Speaker enrollment did not stabilize for chunk {chunk_number}"
+        )
 
     def transcribe(
         self,
@@ -446,11 +758,11 @@ class Transcriber:
 
         logger.debug(f"Audio duration: {duration_seconds:.1f}s")
 
-        # Determine if we need to chunk. Diarized requests already use the API's
-        # auto chunking, so avoid app-level chunking when the whole file fits.
-        needs_chunking = file_size_mb > self.MAX_FILE_SIZE_MB or (
-            model != self.DIARIZE_MODEL
-            and duration_seconds > self.MAX_CHUNK_DURATION
+        # Long meetings use bounded, resumable requests. Diarized chunks carry
+        # provider-supported voice references so speaker identity remains global.
+        needs_chunking = (
+            file_size_mb > self.MAX_FILE_SIZE_MB
+            or duration_seconds > self.MAX_CHUNK_DURATION
         )
         if needs_chunking:
             return self._transcribe_chunked(
@@ -464,6 +776,20 @@ class Transcriber:
 
         return self._transcribe_single(
             audio_path, language, duration_seconds, model, progress_callback
+        )
+
+    def _is_retryable_transcription_error(self, error: Exception) -> bool:
+        message = str(error).lower()
+        return any(
+            marker in message
+            for marker in (
+                "500",
+                "502",
+                "503",
+                "connection error",
+                "timeout",
+                "timed out",
+            )
         )
 
     def _transcribe_single(
@@ -493,8 +819,10 @@ class Transcriber:
                         )
                     break
                 except Exception as e:
-                    is_retryable = "500" in str(e) or "502" in str(e) or "503" in str(e) or "Connection error" in str(e) or "timeout" in str(e).lower()
-                    if is_retryable and attempt < max_retries - 1:
+                    if (
+                        self._is_retryable_transcription_error(e)
+                        and attempt < max_retries - 1
+                    ):
                         wait_time = 2 ** (attempt + 1)
                         logger.warning(f"Transcription attempt {attempt + 1} failed: {e}. Retrying in {wait_time}s...")
                         time.sleep(wait_time)
@@ -507,13 +835,7 @@ class Transcriber:
                 use_heuristic_speakers=(model == self.WHISPER_MODEL),
             )
             if model == self.DIARIZE_MODEL:
-                self._normalize_diarized_chunk_speakers(
-                    segments,
-                    previous_segments=[],
-                    chunk_output_start=0.0,
-                    next_speaker_number=1,
-                )
-
+                self._normalize_global_speaker_labels(segments)
             # Clean transcription from hallucinations
             full_text, segments = self._clean_transcription(full_text, segments)
 
@@ -563,29 +885,52 @@ class Transcriber:
         num_chunks = math.ceil(len(audio) / chunk_duration_ms)
         cache_path = self._chunk_cache_path(resume_key, model) if resume_key else None
         chunk_cache = self._load_chunk_cache(cache_path)
-        chunk_cache["meta"] = {
+        audio_stat = audio_path.stat()
+        cache_meta = {
+            "pipeline_version": self.DIARIZATION_PIPELINE_VERSION,
             "audio_path": str(audio_path),
+            "audio_size": audio_stat.st_size,
+            "audio_mtime_ns": audio_stat.st_mtime_ns,
             "model": model,
             "duration_seconds": duration_seconds,
             "chunk_duration_ms": chunk_duration_ms,
             "num_chunks": num_chunks,
         }
+        if chunk_cache.get("meta") != cache_meta:
+            chunk_cache = {"chunks": {}}
+        chunk_cache["meta"] = cache_meta
         chunk_entries = chunk_cache.setdefault("chunks", {})
+        speaker_references: dict[str, str] = {}
+        reference_chunks: dict[str, int] = {}
+        if model == self.DIARIZE_MODEL:
+            cached_references = chunk_cache.get("speaker_references", {})
+            if isinstance(cached_references, dict):
+                speaker_references = {
+                    str(name): str(reference)
+                    for name, reference in cached_references.items()
+                    if isinstance(name, str) and isinstance(reference, str)
+                }
+            if len(speaker_references) > self.MAX_KNOWN_SPEAKERS:
+                chunk_cache = {"meta": cache_meta, "chunks": {}}
+                chunk_entries = chunk_cache["chunks"]
+                speaker_references = {}
+            cached_reference_chunks = chunk_cache.get("reference_chunks", {})
+            if isinstance(cached_reference_chunks, dict):
+                reference_chunks = {
+                    str(name): int(chunk_number)
+                    for name, chunk_number in cached_reference_chunks.items()
+                    if isinstance(name, str)
+                    and isinstance(chunk_number, (int, float))
+                }
 
         all_segments: list[TranscriptSegment] = []
         full_text_parts: list[str] = []
         detected_language = language
-        next_speaker_number = 1
 
         skipped_chunks = 0
         for i in range(num_chunks):
             output_start_ms = i * chunk_duration_ms
-            overlap_ms = (
-                self.DIARIZE_CHUNK_OVERLAP_SECONDS * 1000
-                if model == self.DIARIZE_MODEL and i > 0
-                else 0
-            )
-            start_ms = max(0, output_start_ms - overlap_ms)
+            start_ms = output_start_ms
             end_ms = min((i + 1) * chunk_duration_ms, len(audio))
             chunk = audio[start_ms:end_ms]
 
@@ -615,13 +960,18 @@ class Transcriber:
                         self._segment_from_cache(segment_data)
                         for segment_data in cached_chunk.get("segments", [])
                     ]
+                    if model == self.DIARIZE_MODEL:
+                        self._refresh_speaker_references(
+                            cached_segments,
+                            chunk,
+                            start_ms / 1000.0,
+                            speaker_references,
+                            reference_chunks,
+                            i + 1,
+                        )
                     all_segments.extend(cached_segments)
                     if detected_language is None and cached_chunk.get("language"):
                         detected_language = cached_chunk["language"]
-                next_speaker_number = cached_chunk.get(
-                    "next_speaker_number",
-                    next_speaker_number,
-                )
                 if progress_callback and not cached_chunk.get("skipped"):
                     progress_callback(
                         i + 1,
@@ -647,12 +997,14 @@ class Transcriber:
                     "skip_reason": skip_reason,
                     "text": chunk_text,
                     "language": chunk_language,
-                    "next_speaker_number": next_speaker_number,
                     "segments": [
                         self._segment_to_cache(segment)
                         for segment in (output_segments or [])
                     ],
                 }
+                if model == self.DIARIZE_MODEL:
+                    chunk_cache["speaker_references"] = speaker_references
+                    chunk_cache["reference_chunks"] = reference_chunks
                 self._save_chunk_cache(cache_path, chunk_cache)
 
             # Skip silent chunks to prevent hallucinations
@@ -687,44 +1039,43 @@ class Transcriber:
                 logger.error(f"Failed to export chunk {i + 1}: {e}")
                 raise
 
-            # Transcribe chunk with retry logic for transient API errors
-            client = self._get_client()
-            max_retries = 3
-            response = None
-            for attempt in range(max_retries):
-                try:
-                    buffer.seek(0)
-                    response = client.audio.transcriptions.create(
-                        **self._build_transcription_params(
-                            model,
-                            ("chunk.wav", buffer, "audio/wav"),
-                            language,
-                        )
-                    )
-                    break
-                except Exception as e:
-                    is_retryable = "500" in str(e) or "502" in str(e) or "503" in str(e) or "Connection error" in str(e) or "timeout" in str(e).lower()
-                    if is_retryable and attempt < max_retries - 1:
-                        wait_time = 2 ** (attempt + 1)  # 2, 4 seconds
-                        logger.warning(f"Chunk {i + 1} attempt {attempt + 1} failed: {e}. Retrying in {wait_time}s...")
-                        time.sleep(wait_time)
-                    else:
-                        logger.error(f"Failed to transcribe chunk {i + 1}: {e}")
-                        raise
-
-            chunk_text, chunk_language, raw_chunk_segments = self._response_to_result_parts(
-                response,
-                language,
-                time_offset=start_ms / 1000.0,
-                use_heuristic_speakers=(model == self.WHISPER_MODEL),
-            )
+            if model == self.DIARIZE_MODEL:
+                (
+                    chunk_text,
+                    chunk_language,
+                    raw_chunk_segments,
+                ) = self._transcribe_diarized_chunk(
+                    buffer,
+                    chunk,
+                    language,
+                    start_ms / 1000.0,
+                    i + 1,
+                    speaker_references,
+                    reference_chunks,
+                )
+            else:
+                response = self._request_chunk_transcription(
+                    buffer,
+                    model,
+                    language,
+                    i + 1,
+                )
+                (
+                    chunk_text,
+                    chunk_language,
+                    raw_chunk_segments,
+                ) = self._response_to_result_parts(
+                    response,
+                    language,
+                    time_offset=start_ms / 1000.0,
+                    use_heuristic_speakers=(model == self.WHISPER_MODEL),
+                )
             if detected_language is None and chunk_language:
                 detected_language = chunk_language
 
             chunk_segments: list[TranscriptSegment] = []
             chunk_text_parts: list[str] = []
             filtered_count = 0
-            output_start_seconds = output_start_ms / 1000.0
 
             for seg in raw_chunk_segments:
                 seg_text = seg.text.strip()
@@ -743,18 +1094,8 @@ class Transcriber:
                     )
                 )
 
-            if model == self.DIARIZE_MODEL:
-                next_speaker_number = self._normalize_diarized_chunk_speakers(
-                    chunk_segments,
-                    all_segments,
-                    output_start_seconds,
-                    next_speaker_number,
-                )
-
             output_chunk_segments: list[TranscriptSegment] = []
             for seg in chunk_segments:
-                if i > 0 and seg.end_time <= output_start_seconds + 0.5:
-                    continue
                 output_chunk_segments.append(seg)
                 chunk_text_parts.append(seg.text)
 
@@ -834,7 +1175,8 @@ class Transcriber:
 
         logger.info(
             f"Chunked transcription complete: {num_chunks} chunks ({skipped_chunks} skipped), "
-            f"{len(full_text)} chars, {len(all_segments)} segments"
+            f"{len(full_text)} chars, {len(all_segments)} segments, "
+            f"{len({segment.speaker for segment in all_segments if segment.speaker})} speakers"
         )
 
         if cache_path and cache_path.exists():

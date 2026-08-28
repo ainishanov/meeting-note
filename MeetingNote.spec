@@ -1,5 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import sys
+from pathlib import Path
+
+from scripts.build_policy import (
+    assert_trusted_binary_sources,
+    normalize_windows_binaries,
+    trusted_build_roots,
+)
+
+
+project_root = Path(SPEC).resolve().parent
+
 a = Analysis(
     ['run.py'],
     pathex=[],
@@ -33,8 +45,17 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['PyQt5', 'PyQt6', 'PySide2'],
     noarchive=False,
+)
+
+# PyInstaller resolves indirect DLLs through PATH. Refuse binaries from unrelated
+# developer tools, then keep Windows-owned ICU/UCRT DLLs out of the bundle and
+# use PySide6's newest compatible MSVC runtime for both Python and Qt.
+assert_trusted_binary_sources(a.binaries, trusted_build_roots(project_root))
+a.binaries = normalize_windows_binaries(
+    a.binaries,
+    pyside_directory=Path(sys.prefix) / 'Lib' / 'site-packages' / 'PySide6',
 )
 
 pyz = PYZ(a.pure)
@@ -49,7 +70,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,

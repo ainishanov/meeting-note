@@ -6,11 +6,14 @@ import hashlib
 import json
 import os
 import re
+import socket
 import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Generic, Optional, TypeVar
 from urllib.parse import urlparse
 
 
@@ -38,6 +41,65 @@ class UpdateInfo:
     checksums: ReleaseAsset
 
 
+class UpdateStage(str, Enum):
+    """User-visible stages of the update pipeline."""
+
+    CHECK = "check"
+    CHECKSUM = "checksum"
+    DOWNLOAD = "download"
+    VERIFY = "verify"
+    SAVE = "save"
+    LAUNCH = "launch"
+
+
+class UpdateFailureKind(str, Enum):
+    """Stable failure categories used by UI copy, retries, and telemetry."""
+
+    NETWORK = "network"
+    RELEASE = "release"
+    INTEGRITY = "integrity"
+    STORAGE = "storage"
+    CANCELLED = "cancelled"
+    LAUNCH = "launch"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class UpdateFailure:
+    stage: UpdateStage
+    kind: UpdateFailureKind
+    detail: str
+    retryable: bool
+    cause: Optional[BaseException] = None
+
+
+class UpdatePipelineError(RuntimeError):
+    """An update failure that retains its exact pipeline stage."""
+
+    def __init__(self, failure: UpdateFailure):
+        super().__init__(failure.detail)
+        self.failure = failure
+
+
+ResultValue = TypeVar("ResultValue")
+
+
+@dataclass(frozen=True)
+class UpdateResult(Generic[ResultValue]):
+    """Typed worker result; success and failure never share an ambiguous value."""
+
+    value: Optional[ResultValue] = None
+    failure: Optional[UpdateFailure] = None
+
+    @classmethod
+    def success(cls, value: Optional[ResultValue] = None) -> "UpdateResult[ResultValue]":
+        return cls(value=value)
+
+    @classmethod
+    def failed(cls, failure: UpdateFailure) -> "UpdateResult[ResultValue]":
+        return cls(failure=failure)
+
+
 def should_check_for_updates(last_check_epoch: int, now: Optional[int] = None) -> bool:
     current = int(time.time()) if now is None else int(now)
     return current - int(last_check_epoch or 0) >= CHECK_INTERVAL_SECONDS
@@ -52,9 +114,29 @@ def check_for_update(current_version: str, timeout: float = 6.0) -> Optional[Upd
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-    return parse_release(payload, current_version)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            raw_payload = response.read()
+    except Exception as error:
+        raise _pipeline_error(
+            UpdateStage.CHECK,
+            _network_or_unknown(error),
+            error,
+            retryable=True,
+        ) from error
+
+    try:
+        payload = json.loads(raw_payload.decode("utf-8"))
+        return parse_release(payload, current_version)
+    except UpdatePipelineError:
+        raise
+    except Exception as error:
+        raise _pipeline_error(
+            UpdateStage.CHECK,
+            UpdateFailureKind.RELEASE,
+            error,
+            retryable=False,
+        ) from error
 
 
 def parse_release(payload: dict[str, Any], current_version: str) -> Optional[UpdateInfo]:
@@ -99,15 +181,44 @@ def download_verified_update(
     cancel_requested: Optional[Callable[[], bool]] = None,
 ) -> Path:
     """Download the selected release asset and verify it against SHA256SUMS.txt."""
-    _validate_download_url(update.asset.url)
-    _validate_download_url(update.checksums.url)
-    destination_dir = Path(destination_dir)
-    destination_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        _validate_download_url(update.asset.url)
+        _validate_download_url(update.checksums.url)
+    except ValueError as error:
+        raise _pipeline_error(
+            UpdateStage.CHECKSUM,
+            UpdateFailureKind.RELEASE,
+            error,
+            retryable=False,
+        ) from error
 
-    checksums_text = _download_bytes(update.checksums.url, timeout).decode(
-        "utf-8", errors="strict"
-    )
-    expected_hash = _find_checksum(checksums_text, update.asset.name)
+    destination_dir = Path(destination_dir)
+    try:
+        destination_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        raise _pipeline_error(
+            UpdateStage.SAVE,
+            UpdateFailureKind.STORAGE,
+            error,
+            retryable=True,
+        ) from error
+
+    try:
+        checksums_text = _download_bytes(
+            update.checksums.url,
+            timeout,
+            stage=UpdateStage.CHECKSUM,
+        ).decode("utf-8", errors="strict")
+        expected_hash = _find_checksum(checksums_text, update.asset.name)
+    except UpdatePipelineError:
+        raise
+    except (UnicodeDecodeError, ValueError) as error:
+        raise _pipeline_error(
+            UpdateStage.CHECKSUM,
+            UpdateFailureKind.RELEASE,
+            error,
+            retryable=False,
+        ) from error
 
     final_path = destination_dir / update.asset.name
     partial_path = final_path.with_suffix(final_path.suffix + ".part")
@@ -117,31 +228,127 @@ def download_verified_update(
             update.asset.url,
             headers={"User-Agent": "MeetingNote-Updater"},
         )
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            with partial_path.open("wb") as output:
+        try:
+            response_context = urllib.request.urlopen(request, timeout=timeout)
+        except Exception as error:
+            raise _pipeline_error(
+                UpdateStage.DOWNLOAD,
+                _network_or_unknown(error),
+                error,
+                retryable=True,
+            ) from error
+
+        with response_context as response:
+            try:
+                output_context = partial_path.open("wb")
+            except OSError as error:
+                raise _pipeline_error(
+                    UpdateStage.SAVE,
+                    UpdateFailureKind.STORAGE,
+                    error,
+                    retryable=True,
+                ) from error
+
+            with output_context as output:
                 while True:
                     if cancel_requested and cancel_requested():
-                        raise InterruptedError("Update download was cancelled")
-                    chunk = response.read(1024 * 1024)
+                        error = InterruptedError("Update download was cancelled")
+                        raise _pipeline_error(
+                            UpdateStage.DOWNLOAD,
+                            UpdateFailureKind.CANCELLED,
+                            error,
+                            retryable=False,
+                        ) from error
+                    try:
+                        chunk = response.read(1024 * 1024)
+                    except Exception as error:
+                        raise _pipeline_error(
+                            UpdateStage.DOWNLOAD,
+                            _network_or_unknown(error),
+                            error,
+                            retryable=True,
+                        ) from error
                     if not chunk:
                         break
                     digest.update(chunk)
-                    output.write(chunk)
+                    try:
+                        output.write(chunk)
+                    except OSError as error:
+                        raise _pipeline_error(
+                            UpdateStage.SAVE,
+                            UpdateFailureKind.STORAGE,
+                            error,
+                            retryable=True,
+                        ) from error
 
         actual_hash = digest.hexdigest().upper()
         if actual_hash != expected_hash:
-            raise ValueError("Downloaded update failed SHA-256 verification")
-        os.replace(partial_path, final_path)
+            error = ValueError("Downloaded update failed SHA-256 verification")
+            raise _pipeline_error(
+                UpdateStage.VERIFY,
+                UpdateFailureKind.INTEGRITY,
+                error,
+                retryable=True,
+            ) from error
+        try:
+            os.replace(partial_path, final_path)
+        except OSError as error:
+            raise _pipeline_error(
+                UpdateStage.SAVE,
+                UpdateFailureKind.STORAGE,
+                error,
+                retryable=True,
+            ) from error
         return final_path
     finally:
-        if partial_path.exists():
+        try:
             partial_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
-def _download_bytes(url: str, timeout: float) -> bytes:
+def classify_update_failure(
+    error: BaseException,
+    default_stage: UpdateStage,
+) -> UpdateFailure:
+    """Convert unexpected worker or installer errors to the stable UI contract."""
+    if isinstance(error, UpdatePipelineError):
+        return error.failure
+    if isinstance(error, InterruptedError):
+        return UpdateFailure(
+            stage=default_stage,
+            kind=UpdateFailureKind.CANCELLED,
+            detail=str(error),
+            retryable=False,
+            cause=error,
+        )
+
+    kind = _network_or_unknown(error)
+    if default_stage == UpdateStage.LAUNCH:
+        kind = UpdateFailureKind.LAUNCH
+    elif isinstance(error, OSError) and kind == UpdateFailureKind.UNKNOWN:
+        kind = UpdateFailureKind.STORAGE
+    return UpdateFailure(
+        stage=default_stage,
+        kind=kind,
+        detail=str(error) or type(error).__name__,
+        retryable=True,
+        cause=error,
+    )
+
+
+def _download_bytes(url: str, timeout: float, *, stage: UpdateStage) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": "MeetingNote-Updater"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return response.read()
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.read()
+    except Exception as error:
+        raise _pipeline_error(
+            stage,
+            _network_or_unknown(error),
+            error,
+            retryable=True,
+        ) from error
 
 
 def _find_checksum(checksums_text: str, asset_name: str) -> str:
@@ -163,3 +370,35 @@ def _validate_download_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme != "https" or parsed.hostname not in _ALLOWED_DOWNLOAD_HOSTS:
         raise ValueError("Update URL is not an approved GitHub HTTPS download")
+
+
+def _network_or_unknown(error: BaseException) -> UpdateFailureKind:
+    if isinstance(
+        error,
+        (
+            urllib.error.URLError,
+            TimeoutError,
+            ConnectionError,
+            socket.timeout,
+        ),
+    ):
+        return UpdateFailureKind.NETWORK
+    return UpdateFailureKind.UNKNOWN
+
+
+def _pipeline_error(
+    stage: UpdateStage,
+    kind: UpdateFailureKind,
+    error: BaseException,
+    *,
+    retryable: bool,
+) -> UpdatePipelineError:
+    return UpdatePipelineError(
+        UpdateFailure(
+            stage=stage,
+            kind=kind,
+            detail=str(error) or type(error).__name__,
+            retryable=retryable,
+            cause=error,
+        )
+    )

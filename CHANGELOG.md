@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.2 — 2026-08-28
+
+### Fixed
+
+- Kept four speaker identities stable across long chunked transcriptions by
+  enrolling and refreshing voice references instead of reusing request-local
+  diarization labels.
+- Added atomic per-chunk transcription caching so interrupted long meetings
+  resume without repeating completed API work.
+- Replaced ambiguous updater exceptions with explicit check, checksum, download,
+  verification, save, and launch stages.
+- Update dialogs now describe the actual failed stage and offer the matching
+  recovery action without claiming a verified download failed.
+- Added visible download progress, cancellation cleanup, and a clear
+  "Close and Install" handoff after SHA-256 verification.
+- Failed update checks no longer suppress automatic checks for the next 24 hours.
+- Windows builds now isolate DLL discovery from developer tools, reject binaries
+  outside trusted roots, require exact lock-file versions, and smoke-test the
+  finished Qt executable before release.
+- A damaged GUI runtime now shows a short native recovery prompt instead of a
+  PyInstaller traceback, with a direct route to the official download page.
+
 ## 0.3.1 — 2026-07-22
 
 ### Changed
