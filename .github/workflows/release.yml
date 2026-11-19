@@ -12,11 +12,11 @@ permissions:
   contents: write
 
 env:
-  RELEASE_VERSION: "0.3.3"
+  RELEASE_VERSION: "0.4.0"
 
 jobs:
   publish:
-    name: Build and publish v0.3.3
+    name: Build and publish v0.4.0
     runs-on: windows-latest
     timeout-minutes: 30
 
@@ -134,12 +134,11 @@ jobs:
 
           Highlights
 
-          - Record the call whether it plays through speakers, wired headphones or a USB headset.
-          - Plug or unplug headphones during a meeting without losing the recording.
-          - See where the call sound is heard while recording and in the audio test.
-          - Keep chosen devices by name, so Windows renumbering does not break settings.
-          - Keep speech from unmatched voices as "Unidentified speaker" instead of failing.
-          - See real progress when a long transcription resumes.
+          - A lighter, modern look that follows the Windows light or dark mode.
+          - A new app icon that stays sharp in the taskbar, tray, desktop shortcut and installer.
+          - Transcription works on slow links such as a VPN: audio is uploaded as compressed MP3.
+          - Long meeting titles in the history list fit narrow windows.
+          - Security updates for the certificate bundle (certifi), urllib3 and setuptools.
 
           Privacy
 
@@ -193,12 +192,12 @@ jobs:
           @"
           ## What changed
 
-          - Meeting audio is captured from every Windows output at once (speakers, wired headphones, USB headsets), so plugging headphones into the jack no longer produces a recording without the other side.
-          - Plugging or unplugging headphones during a recording re-scans devices and keeps recording on the same timeline.
-          - The recording panel and the audio test show which output carries the call sound.
-          - Pinned outputs and microphones are stored by name and survive Windows renumbering devices; older saved microphone numbers are matched automatically.
-          - A voice that cannot be matched to a known speaker no longer stops a long transcription; its speech is kept as "Unidentified speaker".
-          - Resumed transcriptions report real progress, and the transcript view shows the running job instead of a Retry button.
+          - A lighter, more modern look: soft white cards on a pale background, one violet accent and rounded corners across the main window, settings, onboarding, feedback and privacy windows and the "call detected" pop-up.
+          - The app follows the Windows light or dark mode. Set the environment variable ``MEETING_NOTE_THEME`` to ``light`` or ``dark`` to choose one yourself.
+          - A new app icon, drawn separately for small and large sizes, so it stays sharp in the taskbar, tray, desktop shortcut and installer.
+          - Transcription no longer fails with "Connection error" on slow uploads such as a VPN: audio goes to OpenAI as compressed MP3, about 0.9 MB per two-minute piece instead of 3.8 MB.
+          - Long meeting titles in the history list are shortened in narrow windows instead of pushing the length and status off the edge.
+          - Security: certifi 2026.10.23 stops trusting the compromised emSign ECC Root CA - G3 certificate; urllib3 2.8.0 and setuptools 84.2.1 fix the issues reported by Dependabot.
 
           ## Download
 

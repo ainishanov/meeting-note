@@ -1,4 +1,4 @@
 """Meeting Note - Audio recording and transcription service."""
 
-__version__ = "0.3.3"
+__version__ = "0.4.0"
 __app_name__ = "Meeting Note"
