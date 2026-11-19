@@ -1,6 +1,7 @@
 $ProjectPath = $PSScriptRoot
 $PythonwPath = Join-Path $ProjectPath "venv\Scripts\pythonw.exe"
 $RunPath = Join-Path $ProjectPath "run.py"
+$IconPath = Join-Path $ProjectPath "assets\app_icon.ico"
 
 if (-not (Test-Path -LiteralPath $PythonwPath)) {
     throw "pythonw.exe not found. Create a venv and install requirements first: $PythonwPath"
@@ -31,6 +32,7 @@ foreach ($DesktopPath in $DesktopPaths) {
     $Shortcut.Arguments = "`"$RunPath`""
     $Shortcut.WorkingDirectory = $ProjectPath
     $Shortcut.Description = "Meeting Note - Audio Transcription"
+    $Shortcut.IconLocation = "$IconPath,0"
     $Shortcut.WindowStyle = 1
     $Shortcut.Save()
 

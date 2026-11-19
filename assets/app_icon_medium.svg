@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256">
+  <!-- Meeting Note app icon (medium, 30-48 px). Source of truth for assets/app_icon.ico and site icons:
+       regenerate with `python scripts/generate_app_icons.py`. -->
+  <defs>
+    <path id="tile" d="M246.0 128.0L246.0 160.3L245.9 170.6L245.7 178.1L245.4 184.2L245.1 189.4L244.7 193.9L244.2 198.0L243.7 201.8L243.0 205.2L242.3 208.4L241.5 211.3L240.7 214.0L239.7 216.6L238.7 219.0L237.6 221.3L236.4 223.4L235.1 225.4L233.8 227.3L232.3 229.1L230.7 230.7L229.1 232.3L227.3 233.8L225.4 235.1L223.4 236.4L221.3 237.6L219.0 238.7L216.6 239.7L214.0 240.7L211.3 241.5L208.4 242.3L205.2 243.0L201.8 243.7L198.0 244.2L193.9 244.7L189.4 245.1L184.2 245.4L178.1 245.7L170.6 245.9L160.3 246.0L128.0 246.0L95.7 246.0L85.4 245.9L77.9 245.7L71.8 245.4L66.6 245.1L62.1 244.7L58.0 244.2L54.2 243.7L50.8 243.0L47.6 242.3L44.7 241.5L42.0 240.7L39.4 239.7L37.0 238.7L34.7 237.6L32.6 236.4L30.6 235.1L28.7 233.8L26.9 232.3L25.3 230.7L23.7 229.1L22.2 227.3L20.9 225.4L19.6 223.4L18.4 221.3L17.3 219.0L16.3 216.6L15.3 214.0L14.5 211.3L13.7 208.4L13.0 205.2L12.3 201.8L11.8 198.0L11.3 193.9L10.9 189.4L10.6 184.2L10.3 178.1L10.1 170.6L10.0 160.3L10.0 128.0L10.0 95.7L10.1 85.4L10.3 77.9L10.6 71.8L10.9 66.6L11.3 62.1L11.8 58.0L12.3 54.2L13.0 50.8L13.7 47.6L14.5 44.7L15.3 42.0L16.3 39.4L17.3 37.0L18.4 34.7L19.6 32.6L20.9 30.6L22.2 28.7L23.7 26.9L25.3 25.3L26.9 23.7L28.7 22.2L30.6 20.9L32.6 19.6L34.7 18.4L37.0 17.3L39.4 16.3L42.0 15.3L44.7 14.5L47.6 13.7L50.8 13.0L54.2 12.3L58.0 11.8L62.1 11.3L66.6 10.9L71.8 10.6L77.9 10.3L85.4 10.1L95.7 10.0L128.0 10.0L160.3 10.0L170.6 10.1L178.1 10.3L184.2 10.6L189.4 10.9L193.9 11.3L198.0 11.8L201.8 12.3L205.2 13.0L208.4 13.7L211.3 14.5L214.0 15.3L216.6 16.3L219.0 17.3L221.3 18.4L223.4 19.6L225.4 20.9L227.3 22.2L229.1 23.7L230.7 25.3L232.3 26.9L233.8 28.7L235.1 30.6L236.4 32.6L237.6 34.7L238.7 37.0L239.7 39.4L240.7 42.0L241.5 44.7L242.3 47.6L243.0 50.8L243.7 54.2L244.2 58.0L244.7 62.1L245.1 66.6L245.4 71.8L245.7 77.9L245.9 85.4L246.0 95.7Z"/>
+    <linearGradient id="bg" x1="20" y1="10" x2="236" y2="246" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8F6DFF"/>
+      <stop offset=".55" stop-color="#5B3BF0"/>
+      <stop offset="1" stop-color="#3720BE"/>
+    </linearGradient>
+    <radialGradient id="teal" cx="30" cy="240" r="175" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1FE3D2" stop-opacity=".9"/>
+      <stop offset=".45" stop-color="#1FE3D2" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#1FE3D2" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="pink" cx="240" cy="14" r="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF8AD8" stop-opacity=".6"/>
+      <stop offset="1" stop-color="#FF8AD8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gloss" x1="0" y1="10" x2="0" y2="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".24"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="0" y1="50" x2="0" y2="212" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E6E8FF"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="0" y1="76" x2="0" y2="162" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6440FF"/>
+      <stop offset="1" stop-color="#10BDB4"/>
+    </linearGradient>
+  </defs>
+
+  <use xlink:href="#tile" fill="url(#bg)"/>
+  <use xlink:href="#tile" fill="url(#teal)"/>
+  <use xlink:href="#tile" fill="url(#pink)"/>
+  <use xlink:href="#tile" fill="url(#gloss)"/>
+
+  <path d="M80 48H176C198.1 48 216 65.9 216 88V152C216 174.1 198.1 192 176 192H120L82 218C76 222 68 217 70 210L74 189C55 183 40 168 40 152V88C40 65.9 57.9 48 80 48Z" fill="url(#paper)"/>
+  <path d="M80 108V132M104 94V146M128 82V158M152 98V142M176 110V130" stroke="url(#wave)" stroke-width="16" stroke-linecap="round" fill="none"/>
+  <circle cx="208" cy="50" r="34" fill="#7F4FF1"/>
+  <circle cx="208" cy="50" r="22" fill="#FF4D6A"/>
+</svg>

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- New app icon: a speech bubble with a sound wave and a recording dot on a
+  violet tile. It is drawn separately for small, taskbar and large sizes, so it
+  stays sharp in the exe, installer, window, tray, desktop shortcut and site.
+- Running from source now shows the Meeting Note icon on the taskbar instead
+  of the Python icon, including with the Microsoft Store Python.
+- `scripts/generate_app_icons.py` rebuilds `assets/app_icon.ico`, the site
+  favicon and the site icons from the SVG sources.
+
 ## 0.3.3 — 2026-11-19
 
 ### Fixed

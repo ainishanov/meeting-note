@@ -66,9 +66,11 @@ class MeetingNoteApp:
 
         from PySide6.QtCore import QTimer
         from PySide6.QtWidgets import QApplication
+        from src.ui import taskbar_identity
         from src.ui.resources import get_app_icon
 
         # Create Qt application
+        taskbar_identity.apply_to_process()
         self._app = QApplication(sys.argv)
         self._app.setApplicationName("Meeting Note")
         self._app.setWindowIcon(get_app_icon())
@@ -90,6 +92,7 @@ class MeetingNoteApp:
             from src.ui.onboarding_dialog import OnboardingDialog
 
             onboarding = OnboardingDialog()
+            taskbar_identity.apply_to_window(onboarding)
             quit_on_last_window = self._app.quitOnLastWindowClosed()
             self._app.setQuitOnLastWindowClosed(False)
             try:
@@ -103,6 +106,7 @@ class MeetingNoteApp:
             from src.ui.privacy_dialog import PrivacyChoiceDialog
 
             privacy = PrivacyChoiceDialog()
+            taskbar_identity.apply_to_window(privacy)
             quit_on_last_window = self._app.quitOnLastWindowClosed()
             self._app.setQuitOnLastWindowClosed(False)
             try:
@@ -144,6 +148,7 @@ class MeetingNoteApp:
         self._app.aboutToQuit.connect(self._cleanup)
 
         # Show window
+        taskbar_identity.apply_to_window(self._main_window)
         self._main_window.show()
         QTimer.singleShot(250, self._main_window.check_interrupted_recordings)
 
