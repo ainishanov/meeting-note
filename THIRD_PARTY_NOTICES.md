@@ -37,8 +37,9 @@ or modified version of these libraries.
 ## Other dependencies
 
 The application also uses packages under OSI-approved licenses, including
-Apache-2.0, BSD, MIT, PSF, and LGPL licenses. Package names and exact versions
-are recorded in `requirements-lock.txt`; their license metadata and license
-files are included in their corresponding source distributions.
+Apache-2.0, BSD, MIT, MPL-2.0 (`certifi`), PSF, and LGPL licenses. Package
+names and exact versions are recorded in `requirements-lock.txt`; their license
+metadata and license files are included in their corresponding source
+distributions.
 
 This notice does not replace the license terms of any dependency.

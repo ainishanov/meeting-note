@@ -27,6 +27,13 @@ pydantic-settings>=2.1.0
 loguru>=0.7.0
 sentry-sdk>=2.0.0
 
+# Security floors for indirect dependencies (pulled in by openai/httpx and
+# sentry-sdk). Older versions have known vulnerabilities:
+# certifi < 2026.10.19 trusts emSign roots with compromised intermediate keys;
+# urllib3 < 2.8.0 has proxy-TLS and chunked-response flaws.
+certifi>=2026.10.19
+urllib3>=2.8.0
+
 # Secure credential storage
 keyring>=24.3.0
 

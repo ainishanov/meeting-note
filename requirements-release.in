@@ -1,2 +1,5 @@
 -r requirements.txt
 pyinstaller>=6.17.0
+# Pulled in by PyInstaller (and bundled via cffi's import of it);
+# < 84.1.0 has a Windows path escape in legacy wheel installs.
+setuptools>=84.1.0

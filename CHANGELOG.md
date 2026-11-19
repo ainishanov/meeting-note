@@ -29,6 +29,22 @@
   Speaker voice samples and short recordings are compressed too. If the MP3
   encoder is missing, the app falls back to WAV as before.
 
+### Security
+
+- The app no longer trusts the eMudhra "emSign ECC Root CA - G3" certificate,
+  whose intermediate keys were compromised: `certifi` is updated to
+  2026.10.23. Without this, an attacker with one of those keys could read or
+  change traffic to OpenAI, OpenRouter or Sentry on a hostile network.
+- `urllib3` (used for crash reports to Sentry) is updated to 2.8.0, which
+  fixes proxy TLS settings being ignored and responses that could make it
+  hang or use unbounded memory.
+- `setuptools` is updated to 84.2.1, which fixes a Windows path escape during
+  legacy wheel installs. The app never installs packages, so this flaw could
+  not be triggered from it; the copy packed into the exe (because `cffi`
+  imports it) and the build tools are updated anyway.
+- `requirements.txt` now sets minimum safe versions for `certifi` and
+  `urllib3`, so a fresh install from source gets the fixed versions too.
+
 ## 0.3.3 — 2026-11-19
 
 ### Fixed
