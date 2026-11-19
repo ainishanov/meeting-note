@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.3 — 2026-11-19
+
+### Fixed
+
+- Meeting audio is no longer lost when headphones are plugged into the jack:
+  the recorder captures every Windows output (speakers, headphones, USB
+  headsets) by default instead of the first loopback device it finds.
+- Plugging or unplugging headphones during a recording re-scans the devices
+  and keeps recording; the new output joins at the right place on the timeline.
+- The recording panel shows where the call sound is heard ("Meeting audio:
+  Headphones") and the audio test reports which output had sound.
+- A pinned output or microphone is now remembered by name, so it survives
+  Windows renumbering devices; older saved microphone numbers are matched to
+  the same device automatically.
+- Audio capture no longer keeps the audio system open while idle, so newly
+  connected devices are visible without restarting the app.
+- A voice that cannot be matched to a known speaker no longer stops a long
+  transcription; its speech is kept and labelled "Unidentified speaker" instead
+  of borrowing another person's name, including in the summary.
+- Resumed transcriptions report real progress (finished chunks are counted up
+  front) and the transcript view shows the running job's progress instead of a
+  Retry button.
+
 ## 0.3.2 — 2026-08-28
 
 ### Fixed

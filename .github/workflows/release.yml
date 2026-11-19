@@ -12,11 +12,11 @@ permissions:
   contents: write
 
 env:
-  RELEASE_VERSION: "0.3.2"
+  RELEASE_VERSION: "0.3.3"
 
 jobs:
   publish:
-    name: Build and publish v0.3.2
+    name: Build and publish v0.3.3
     runs-on: windows-latest
     timeout-minutes: 30
 
@@ -134,12 +134,12 @@ jobs:
 
           Highlights
 
-          - Keep four speakers stable across long recordings with adaptive voice references.
-          - Resume long transcriptions from an atomic chunk cache after network failures.
-          - See the exact failed update stage and retry the correct action.
-          - Follow visible download progress and install only after SHA-256 verification.
-          - Build from locked dependencies and reject DLLs outside trusted roots.
-          - Recover from a damaged GUI runtime with a direct download prompt.
+          - Record the call whether it plays through speakers, wired headphones or a USB headset.
+          - Plug or unplug headphones during a meeting without losing the recording.
+          - See where the call sound is heard while recording and in the audio test.
+          - Keep chosen devices by name, so Windows renumbering does not break settings.
+          - Keep speech from unmatched voices as "Unidentified speaker" instead of failing.
+          - See real progress when a long transcription resumes.
 
           Privacy
 
@@ -193,12 +193,12 @@ jobs:
           @"
           ## What changed
 
-          - Speaker identities now remain stable across long chunked transcriptions by using adaptive voice references instead of request-local labels.
-          - Long transcriptions resume from an atomic per-chunk cache after network failures without repeating completed API work.
-          - Update failures now identify the exact check, download, verification, save, or launch stage and offer the matching recovery action.
-          - Update downloads show progress, remove partial files on cancellation, and require SHA-256 verification before installation.
-          - Windows builds now enforce locked dependencies, trusted DLL sources, and a frozen-runtime smoke test.
-          - A damaged GUI runtime shows a native recovery prompt with a direct route to the latest release.
+          - Meeting audio is captured from every Windows output at once (speakers, wired headphones, USB headsets), so plugging headphones into the jack no longer produces a recording without the other side.
+          - Plugging or unplugging headphones during a recording re-scans devices and keeps recording on the same timeline.
+          - The recording panel and the audio test show which output carries the call sound.
+          - Pinned outputs and microphones are stored by name and survive Windows renumbering devices; older saved microphone numbers are matched automatically.
+          - A voice that cannot be matched to a known speaker no longer stops a long transcription; its speech is kept as "Unidentified speaker".
+          - Resumed transcriptions report real progress, and the transcript view shows the running job instead of a Retry button.
 
           ## Download
 
