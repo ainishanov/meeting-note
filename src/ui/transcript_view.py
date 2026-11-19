@@ -565,10 +565,13 @@ class TranscriptViewWidget(QWidget):
         self.copy_button.setEnabled(transcript is not None and bool(transcript.full_text))
         self._reset_missing_file_notice()
 
-        needs_retry = transcript is None or recording.status in (
-            "error",
-            "pending",
-            "transcribing",
+        active_processing = processing_job is not None and processing_job.status in (
+            "queued",
+            "running",
+        )
+        needs_retry = not active_processing and (
+            transcript is None
+            or recording.status in ("error", "pending", "transcribing")
         )
         self.retry_button.setVisible(needs_retry)
         self.retry_button.setEnabled(needs_retry)
@@ -600,6 +603,18 @@ class TranscriptViewWidget(QWidget):
             self.tab_widget.setCurrentWidget(self.summary_tab)
         else:
             self.tab_widget.setCurrentWidget(self.transcript_tab)
+
+        if active_processing:
+            payload = processing_job.payload or {}
+            progress = payload.get("progress") or {}
+            message = str(progress.get("message") or tr("Обработка..."))
+            self.show_progress(message)
+            current = progress.get("current")
+            total = progress.get("total")
+            if isinstance(current, int) and isinstance(total, int) and total > 0:
+                self.update_progress(current, total, message)
+        elif recording.status not in ("transcribing", "summarizing"):
+            self.hide_progress()
 
     def clear(self):
         self._recording = None
@@ -659,6 +674,8 @@ class TranscriptViewWidget(QWidget):
 
             for seg in self._segments:
                 speaker_label = seg.display_speaker
+                if not seg.speaker and not seg.speaker_name:
+                    speaker_label = tr("Неопознанный голос")
                 if speaker_label != current_speaker:
                     current_speaker = speaker_label
                     speaker_color = self._get_speaker_color(seg.speaker)

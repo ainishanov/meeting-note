@@ -627,7 +627,7 @@ class Transcriber:
         """Enroll unknown voices one at a time, then return globally named turns."""
         candidate_names: list[str] = []
         max_classification_passes = self.MAX_KNOWN_SPEAKERS * 3
-        for _ in range(max_classification_passes):
+        for pass_index in range(max_classification_passes):
             response = self._request_chunk_transcription(
                 buffer,
                 self.DIARIZE_MODEL,
@@ -649,17 +649,8 @@ class Transcriber:
                 segments,
                 speaker_references,
             )
-            if not unknown_labels:
-                self._refresh_speaker_references(
-                    segments,
-                    chunk,
-                    chunk_start_seconds,
-                    speaker_references,
-                    reference_chunks,
-                    chunk_number,
-                )
-                self._map_known_speaker_labels(segments, speaker_references)
-                return chunk_text, chunk_language, segments
+            if not unknown_labels or pass_index == max_classification_passes - 1:
+                break
 
             used_known_names = {
                 segment.speaker
@@ -678,16 +669,9 @@ class Transcriber:
                 replace_api_name is None
                 and len(speaker_references) >= self.MAX_KNOWN_SPEAKERS
             ):
-                inactive_names = [
-                    name
-                    for name in speaker_references
-                    if name not in used_known_names
-                ]
-                if inactive_names:
-                    replace_api_name = min(
-                        inactive_names,
-                        key=lambda name: reference_chunks.get(name, -1),
-                    )
+                # An unmatched voice cannot safely reuse an established ID.
+                # Preserve the speech even when all reference slots are full.
+                break
             enrolled_name = self._enroll_next_speaker(
                 segments,
                 chunk,
@@ -704,9 +688,27 @@ class Transcriber:
                 "reclassifying the chunk with voice references"
             )
 
-        raise RuntimeError(
-            f"Speaker enrollment did not stabilize for chunk {chunk_number}"
+        unknown_labels = set(self._unknown_speaker_labels(segments, speaker_references))
+        if unknown_labels:
+            logger.warning(
+                f"Chunk {chunk_number}: preserving {len(unknown_labels)} unmatched "
+                "voice labels without assigning a speaker identity"
+            )
+            for segment in segments:
+                if segment.speaker in unknown_labels:
+                    segment.speaker = None
+                    segment.speaker_name = None
+
+        self._refresh_speaker_references(
+            segments,
+            chunk,
+            chunk_start_seconds,
+            speaker_references,
+            reference_chunks,
+            chunk_number,
         )
+        self._map_known_speaker_labels(segments, speaker_references)
+        return chunk_text, chunk_language, segments
 
     def transcribe(
         self,
@@ -927,6 +929,23 @@ class Transcriber:
         full_text_parts: list[str] = []
         detected_language = language
 
+        cached_indices = {
+            i
+            for i in range(num_chunks)
+            if self._is_valid_cached_chunk(
+                chunk_entries.get(str(i)),
+                i * chunk_duration_ms,
+                min((i + 1) * chunk_duration_ms, len(audio)),
+            )
+        }
+        completed_chunks = len(cached_indices)
+        if progress_callback and completed_chunks:
+            progress_callback(
+                completed_chunks,
+                num_chunks,
+                f"Продолжаю: {completed_chunks}/{num_chunks} фрагментов уже готовы",
+            )
+
         skipped_chunks = 0
         for i in range(num_chunks):
             output_start_ms = i * chunk_duration_ms
@@ -936,24 +955,11 @@ class Transcriber:
 
             logger.debug(f"Processing chunk {i + 1}/{num_chunks} ({start_ms/1000:.1f}s - {end_ms/1000:.1f}s)")
 
-            if progress_callback:
-                time_range = f"{start_ms//1000//60}:{start_ms//1000%60:02d} - {end_ms//1000//60}:{end_ms//1000%60:02d}"
-                message = f"Фрагмент {i + 1}/{num_chunks}: обработка ({time_range})"
-                logger.debug(f"Progress update: {i}/{num_chunks} - {message}")
-                progress_callback(i, num_chunks, message)
-
             cached_chunk = chunk_entries.get(str(i))
-            if self._is_valid_cached_chunk(cached_chunk, start_ms, end_ms):
+            if i in cached_indices:
                 logger.info(f"Using cached transcription chunk {i + 1}/{num_chunks}")
                 if cached_chunk.get("skipped"):
                     skipped_chunks += 1
-                    if progress_callback:
-                        reason = cached_chunk.get("skip_reason") or "пропущен"
-                        progress_callback(
-                            i + 1,
-                            num_chunks,
-                            f"Фрагмент {i + 1}/{num_chunks} пропущен: {reason}",
-                        )
                 else:
                     full_text_parts.append(cached_chunk.get("text", ""))
                     cached_segments = [
@@ -972,13 +978,13 @@ class Transcriber:
                     all_segments.extend(cached_segments)
                     if detected_language is None and cached_chunk.get("language"):
                         detected_language = cached_chunk["language"]
-                if progress_callback and not cached_chunk.get("skipped"):
-                    progress_callback(
-                        i + 1,
-                        num_chunks,
-                        f"Фрагмент {i + 1}/{num_chunks} уже готов",
-                    )
                 continue
+
+            if progress_callback:
+                time_range = f"{start_ms//1000//60}:{start_ms//1000%60:02d} - {end_ms//1000//60}:{end_ms//1000%60:02d}"
+                message = f"Фрагмент {i + 1}/{num_chunks}: обработка ({time_range})"
+                logger.debug(f"Progress update: {completed_chunks}/{num_chunks} - {message}")
+                progress_callback(completed_chunks, num_chunks, message)
 
             def cache_chunk(
                 *,
@@ -1012,9 +1018,10 @@ class Transcriber:
                 logger.info(f"Skipping silent chunk {i + 1}/{num_chunks}")
                 skipped_chunks += 1
                 cache_chunk(skipped=True, skip_reason="тишина")
+                completed_chunks += 1
                 if progress_callback:
                     progress_callback(
-                        i + 1,
+                        completed_chunks,
                         num_chunks,
                         f"Фрагмент {i + 1}/{num_chunks} пропущен: тишина",
                     )
@@ -1115,9 +1122,10 @@ class Transcriber:
                     chunk_language=chunk_language,
                     skip_reason="галлюцинация модели",
                 )
+                completed_chunks += 1
                 if progress_callback:
                     progress_callback(
-                        i + 1,
+                        completed_chunks,
                         num_chunks,
                         f"Фрагмент {i + 1}/{num_chunks} пропущен: галлюцинация модели",
                     )
@@ -1133,9 +1141,10 @@ class Transcriber:
                     chunk_language=chunk_language,
                     skip_reason="повторяющаяся галлюцинация",
                 )
+                completed_chunks += 1
                 if progress_callback:
                     progress_callback(
-                        i + 1,
+                        completed_chunks,
                         num_chunks,
                         f"Фрагмент {i + 1}/{num_chunks} пропущен: повторяющаяся галлюцинация",
                     )
@@ -1155,9 +1164,10 @@ class Transcriber:
                 output_segments=output_chunk_segments,
                 chunk_language=chunk_language,
             )
+            completed_chunks += 1
             if progress_callback:
                 progress_callback(
-                    i + 1,
+                    completed_chunks,
                     num_chunks,
                     f"Фрагмент {i + 1}/{num_chunks} готов",
                 )

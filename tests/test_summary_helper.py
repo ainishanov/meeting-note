@@ -58,6 +58,26 @@ class SpeakerAwareSummaryTest(unittest.TestCase):
         self.assertEqual(summarizer.segments[0]["speaker"], "Ольга")
         self.assertEqual(summary.summary, "speaker summary")
 
+    def test_keeps_unidentified_speech_in_summary_without_borrowing_a_name(self):
+        summarizer = FakeSummarizer()
+        segments = [
+            TranscriptSegment(
+                transcript_id=1, speaker="Speaker 1", speaker_name="Ольга",
+                start_time=0.0, end_time=1.0, text="Нужно подготовить договор",
+            ),
+            TranscriptSegment(
+                transcript_id=1, speaker=None,
+                start_time=1.0, end_time=3.0, text="Срок нужно согласовать отдельно",
+            ),
+        ]
+
+        create_speaker_aware_summary(summarizer, 10, "", segments)
+
+        self.assertEqual(summarizer.segments, [
+            {"speaker": "Ольга", "text": "Нужно подготовить договор"},
+            {"speaker": "Unidentified speaker", "text": "Срок нужно согласовать отдельно"},
+        ])
+
 
 if __name__ == "__main__":
     unittest.main()

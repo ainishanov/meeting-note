@@ -62,7 +62,7 @@ class TranscriptSegment(BaseModel):
 
     @property
     def display_speaker(self) -> str:
-        return self.speaker_name or self.speaker or "Speaker"
+        return self.speaker_name or self.speaker or "Unidentified speaker"
 
 
 class Summary(BaseModel):

@@ -102,7 +102,7 @@ class TranscriberSpeakerNormalizationTest(unittest.TestCase):
         )
         self.assertEqual(list(speaker_references), ["speaker_1", "speaker_2"])
 
-    def test_fails_closed_instead_of_creating_fifth_speaker(self):
+    def test_enrollment_respects_provider_reference_limit(self):
         segments = [segment("A", 0.0, 3.0, "Неизвестный голос")]
         audio = AudioSegment.silent(duration=3000, frame_rate=16000)
         speaker_references = {
@@ -173,6 +173,87 @@ class TranscriberSpeakerNormalizationTest(unittest.TestCase):
 
     def test_uses_two_minute_bounded_chunks(self):
         self.assertEqual(self.transcriber.MAX_CHUNK_DURATION, 120)
+
+    def test_preserves_unmatched_speech_alongside_four_known_voices(self):
+        references = {
+            f"speaker_{index}": "data:audio/wav;base64,known"
+            for index in range(1, 5)
+        }
+        response = {
+            "text": "Known turns. An unmatched voice still needs to be saved.",
+            "segments": [
+                {"speaker": f"speaker_{index}", "start": (index - 1) * 3,
+                 "end": index * 3, "text": f"Known turn {index}."}
+                for index in range(1, 5)
+            ] + [
+                {"speaker": "A", "start": 12.0, "end": 35.9,
+                 "text": "An unmatched voice still needs to be saved."},
+            ],
+        }
+        with patch.object(
+            self.transcriber, "_request_chunk_transcription", return_value=response,
+        ) as request:
+            text, _, segments = self.transcriber._transcribe_diarized_chunk(
+                io.BytesIO(),
+                AudioSegment.silent(duration=40000, frame_rate=16000),
+                "en", 1680.0, 15, references, {},
+            )
+
+        request.assert_called_once()
+        self.assertEqual(text, response["text"])
+        self.assertEqual([s.speaker for s in segments], [
+            "Speaker 1", "Speaker 2", "Speaker 3", "Speaker 4", None,
+        ])
+        self.assertEqual(segments[-1].start_time, 1692.0)
+        self.assertEqual(segments[-1].text, response["segments"][-1]["text"])
+        self.assertEqual(segments[-1].display_speaker, "Unidentified speaker")
+        self.assertEqual(len(references), 4)
+
+    def test_unmatched_voice_does_not_replace_an_existing_speaker_identity(self):
+        references = {
+            f"speaker_{index}": f"original-reference-{index}"
+            for index in range(1, 5)
+        }
+        response = {
+            "text": "A new or unmatched voice.",
+            "segments": [{"speaker": "A", "start": 0.0, "end": 3.0,
+                          "text": "A new or unmatched voice."}],
+        }
+        original_references = references.copy()
+        with patch.object(
+            self.transcriber, "_request_chunk_transcription", return_value=response,
+        ) as request:
+            _, _, segments = self.transcriber._transcribe_diarized_chunk(
+                io.BytesIO(),
+                AudioSegment.silent(duration=4000, frame_rate=16000),
+                "en", 0.0, 15, references, {},
+            )
+
+        request.assert_called_once()
+        self.assertEqual(references, original_references)
+        self.assertIsNone(segments[0].speaker)
+        self.assertIsNone(segments[0].speaker_name)
+
+    def test_nonconverging_enrollment_preserves_text_after_bounded_attempts(self):
+        response = {
+            "text": "Keep this speech even if recognition does not converge.",
+            "segments": [{"speaker": "A", "start": 0.0, "end": 3.0,
+                          "text": "Keep this speech even if recognition does not converge."}],
+        }
+        references = {}
+        with patch.object(
+            self.transcriber, "_request_chunk_transcription", return_value=response,
+        ) as request:
+            text, _, segments = self.transcriber._transcribe_diarized_chunk(
+                io.BytesIO(),
+                AudioSegment.silent(duration=4000, frame_rate=16000),
+                "en", 0.0, 1, references, {},
+            )
+
+        self.assertEqual(request.call_count, self.transcriber.MAX_KNOWN_SPEAKERS * 3)
+        self.assertEqual(text, response["text"])
+        self.assertIsNone(segments[0].speaker)
+        self.assertEqual(segments[0].text, response["text"])
 
     def test_routes_long_diarization_to_chunked_pipeline(self):
         expected = object()

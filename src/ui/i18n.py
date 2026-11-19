@@ -19,6 +19,7 @@ SUPPORTED_LANGUAGES = {
 
 
 EN: dict[str, str] = {
+    "Неопознанный голос": "Unidentified speaker",
     "Bug report": "Bug Report",
     "Discussion": "Discussion",
     "Feature request": "Feature Request",
