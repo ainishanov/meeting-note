@@ -71,7 +71,11 @@ class Settings(BaseSettings):
     )
     audio_device_index: Optional[int] = Field(
         default=None,
-        description="System audio device index (None = default loopback device)",
+        description="Pinned output index (legacy; None = record every output)",
+    )
+    audio_device_name: Optional[str] = Field(
+        default=None,
+        description="Pinned output name (None = record every output automatically)",
     )
 
     # Microphone settings
@@ -81,7 +85,7 @@ class Settings(BaseSettings):
     )
     microphone_device_index: Optional[int] = Field(
         default=None,
-        description="Microphone device index (None = default input device)",
+        description="Legacy microphone index; the name in keyring wins (None = Windows default)",
     )
     microphone_volume: float = Field(
         default=1.0,

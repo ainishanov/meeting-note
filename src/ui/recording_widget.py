@@ -131,6 +131,7 @@ class RecordingWidget(QWidget):
         self._recording_state = "idle"
         self._recording_duration = 0
         self._detected_app = ""
+        self._audio_source = None
         self._setup_ui()
         self._setup_timer()
 
@@ -298,6 +299,7 @@ class RecordingWidget(QWidget):
 
         elif state_value == "idle":
             self._clear_detected_meeting(reset_ui=False)
+            self._audio_source = None
             self.status_label.setText(tr("Готов к записи"))
             self.context_label.setText(tr("Системный звук и микрофон"))
             self.status_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
@@ -316,7 +318,9 @@ class RecordingWidget(QWidget):
         elif state_value == "recording":
             self._clear_detected_meeting(reset_ui=False)
             self.status_label.setText(tr("Запись"))
-            self.context_label.setText(tr("Системный звук и микрофон записываются"))
+            self.context_label.setText(
+                self._audio_source_text() or tr("Системный звук и микрофон записываются")
+            )
             self.status_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {STATUS_RECORDING}; background: transparent;")
             self.main_button.setText(tr("Пауза"))
             self.main_button.setEnabled(True)
@@ -378,6 +382,30 @@ class RecordingWidget(QWidget):
 
     def set_audio_level(self, level: float):
         self.level_meter.set_level(level)
+
+    def set_audio_source(self, status: object) -> None:
+        """Show where the meeting sound is captured from (CaptureStatus)."""
+        self._audio_source = status
+        if _state_value(self._recording_state) == "recording":
+            text = self._audio_source_text()
+            if text:
+                self.context_label.setText(text)
+
+    def _audio_source_text(self) -> str:
+        status = self._audio_source
+        if status is None:
+            return ""
+        active = getattr(status, "active_system_source", None)
+        sources = tuple(getattr(status, "system_sources", ()) or ())
+        if active:
+            text = tr("Звук встречи: {source}", source=active)
+        elif sources:
+            text = tr("Слушаю: {sources}", sources=", ".join(sources))
+        else:
+            text = tr("Выходы звука не найдены")
+        if getattr(status, "microphone", None):
+            text += " · " + tr("микрофон")
+        return text
 
     def _update_duration(self):
         self._recording_duration += 1

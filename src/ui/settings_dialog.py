@@ -34,6 +34,25 @@ from src.ui.theme import TEXT_TERTIARY
 from src.ui.i18n import SUPPORTED_LANGUAGES, tr
 
 
+def describe_audio_sources(result: dict) -> list[str]:
+    """Plain-language lines about where the audio test heard sound."""
+    lines = []
+    source = result.get("system_source")
+    sources = result.get("system_sources") or []
+    if source:
+        lines.append(tr("Звук собеседника слышен в: {source}.", source=source))
+    elif sources:
+        lines.append(
+            tr("Слушаю выходы: {names}. Включите любой звук, чтобы проверить.", names=", ".join(sources))
+        )
+    else:
+        lines.append(tr("Выходы звука не найдены — подключите наушники или колонки."))
+    mic_source = result.get("microphone_source")
+    if mic_source:
+        lines.append(tr("Микрофон: {name}.", name=mic_source))
+    return lines
+
+
 class AudioTestWorker(QThread):
     """Short audio-device probe used by the settings dialog."""
 
@@ -48,14 +67,18 @@ class AudioTestWorker(QThread):
         microphone_enabled: bool,
         microphone_device_index: Optional[int],
         microphone_volume: float,
+        audio_device_name: Optional[str] = None,
+        microphone_device_name: Optional[str] = None,
     ):
         super().__init__()
         self.output_dir = output_dir
         self.sample_rate = sample_rate
         self.channels = channels
         self.audio_device_index = audio_device_index
+        self.audio_device_name = audio_device_name
         self.microphone_enabled = microphone_enabled
         self.microphone_device_index = microphone_device_index
+        self.microphone_device_name = microphone_device_name
         self.microphone_volume = microphone_volume
 
     def run(self):
@@ -68,11 +91,12 @@ class AudioTestWorker(QThread):
                 channels=self.channels,
                 microphone_enabled=self.microphone_enabled,
                 microphone_device_index=self.microphone_device_index,
+                microphone_device_name=self.microphone_device_name,
                 microphone_volume=self.microphone_volume,
             )
             try:
-                if self.audio_device_index is not None:
-                    recorder.set_device(self.audio_device_index)
+                if self.audio_device_name or self.audio_device_index is not None:
+                    recorder.set_device(self.audio_device_index, self.audio_device_name)
                 levels = recorder.test_levels(duration_seconds=3.0)
             finally:
                 recorder.cleanup()
@@ -315,6 +339,10 @@ class SettingsDialog(QDialog):
         device_layout = QFormLayout(device_group)
 
         self.device_combo = QComboBox()
+        self.device_combo.setToolTip(
+            tr("В автоматическом режиме записываются динамики, наушники и гарнитура сразу — "
+               "приложение само находит, куда идёт звук звонка, даже если вы подключите наушники во время встречи.")
+        )
         device_layout.addRow(tr("Устройство:"), self.device_combo)
 
         refresh_button = QPushButton(tr("Обновить список"))
@@ -489,8 +517,8 @@ class SettingsDialog(QDialog):
         """Refresh both audio device lists using a single AudioRecorder instance."""
         self.device_combo.clear()
         self.mic_device_combo.clear()
-        self.device_combo.addItem(tr("По умолчанию"), None)
-        self.mic_device_combo.addItem(tr("По умолчанию"), None)
+        self.device_combo.addItem(tr("Автоматически — все выходы (динамики, наушники)"), None)
+        self.mic_device_combo.addItem(tr("Автоматически (как в Windows)"), None)
 
         try:
             from src.core.audio_recorder import AudioRecorder
@@ -500,12 +528,16 @@ class SettingsDialog(QDialog):
                 sample_rate=self.settings.sample_rate,
             )
             try:
-                for device in recorder.get_available_devices():
-                    label = device.name + (" (Loopback)" if device.is_loopback else "")
-                    self.device_combo.addItem(label, device.index)
+                outputs, microphones = recorder.get_capture_devices()
+                for device in outputs:
+                    self.device_combo.addItem(
+                        device.display_name, {"index": device.index, "name": device.name}
+                    )
 
-                for device in recorder.get_microphone_devices():
-                    self.mic_device_combo.addItem(device.name, device.index)
+                for device in microphones:
+                    self.mic_device_combo.addItem(
+                        device.display_name, {"index": device.index, "name": device.name}
+                    )
             finally:
                 recorder.cleanup()
 
@@ -542,24 +574,20 @@ class SettingsDialog(QDialog):
 
         self.channels_combo.setCurrentIndex(0 if self.settings.channels == 1 else 1)
 
-        if self.settings.audio_device_index is not None:
-            for i in range(self.device_combo.count()):
-                if self.device_combo.itemData(i) == self.settings.audio_device_index:
-                    self.device_combo.setCurrentIndex(i)
-                    break
+        self._select_device(
+            self.device_combo,
+            self.settings.audio_device_name,
+            self.settings.audio_device_index,
+        )
 
         # Microphone settings
         mic_settings = get_microphone_settings()
         self.mic_enabled_checkbox.setChecked(mic_settings.get("enabled", True))
         self.mic_volume_spin.setValue(int(mic_settings.get("volume", 1.0) * 100))
 
-        # Set microphone device
-        device_index = mic_settings.get("device_index")
-        if device_index is not None:
-            for i in range(self.mic_device_combo.count()):
-                if self.mic_device_combo.itemData(i) == device_index:
-                    self.mic_device_combo.setCurrentIndex(i)
-                    break
+        # Set microphone device. Old settings stored only an index from another
+        # device list; those show as "automatic", which follows Windows.
+        self._select_device(self.mic_device_combo, mic_settings.get("device_name"), None)
 
         # Update enabled state
         self._on_mic_enabled_changed(mic_settings.get("enabled", True))
@@ -596,16 +624,18 @@ class SettingsDialog(QDialog):
 
         # Save microphone settings
         mic_enabled = self.mic_enabled_checkbox.isChecked()
-        mic_device_index = self.mic_device_combo.currentData()
+        mic_device_index, mic_device_name = self._device_choice(self.mic_device_combo)
         mic_volume = self.mic_volume_spin.value() / 100.0
-        set_microphone_settings(mic_enabled, mic_device_index, mic_volume)
+        set_microphone_settings(mic_enabled, mic_device_index, mic_volume, device_name=mic_device_name)
+        audio_device_index, audio_device_name = self._device_choice(self.device_combo)
 
         trigger_mode = self.trigger_mode_combo.currentData()
         save_env_settings(
             {
                 "SAMPLE_RATE": int(self.sample_rate_combo.currentText()),
                 "CHANNELS": 1 if self.channels_combo.currentIndex() == 0 else 2,
-                "AUDIO_DEVICE_INDEX": self.device_combo.currentData(),
+                "AUDIO_DEVICE_INDEX": audio_device_index,
+                "AUDIO_DEVICE_NAME": audio_device_name,
                 "APP_LANGUAGE": self.language_combo.currentData(),
                 "TRANSCRIPTION_MODEL": self.transcription_model_combo.currentData(),
                 "SUMMARY_MODEL": self.summary_model_input.text().strip()
@@ -717,9 +747,11 @@ class SettingsDialog(QDialog):
             output_dir=self.settings.recordings_dir,
             sample_rate=int(self.sample_rate_combo.currentText()),
             channels=1 if self.channels_combo.currentIndex() == 0 else 2,
-            audio_device_index=self.device_combo.currentData(),
+            audio_device_index=self._device_choice(self.device_combo)[0],
+            audio_device_name=self._device_choice(self.device_combo)[1],
             microphone_enabled=self.mic_enabled_checkbox.isChecked(),
-            microphone_device_index=self.mic_device_combo.currentData(),
+            microphone_device_index=self._device_choice(self.mic_device_combo)[0],
+            microphone_device_name=self._device_choice(self.mic_device_combo)[1],
             microphone_volume=self.mic_volume_spin.value() / 100.0,
         )
         self._audio_test_worker.finished.connect(self._on_audio_test_finished)
@@ -747,10 +779,28 @@ class SettingsDialog(QDialog):
             mic_text = f"{int(mic_level * 100)}%"
 
         if system_pct < 1 and (mic_level is None or mic_level < 0.01):
-            self.audio_test_label.setText(
-                tr("Сигнал почти не обнаружен. Системный звук: {system_pct}%, микрофон: {mic_text}.", system_pct=system_pct, mic_text=mic_text)
-            )
+            summary = tr("Сигнал почти не обнаружен. Системный звук: {system_pct}%, микрофон: {mic_text}.", system_pct=system_pct, mic_text=mic_text)
         else:
-            self.audio_test_label.setText(
-                tr("Сигнал есть. Системный звук: {system_pct}%, микрофон: {mic_text}.", system_pct=system_pct, mic_text=mic_text)
-            )
+            summary = tr("Сигнал есть. Системный звук: {system_pct}%, микрофон: {mic_text}.", system_pct=system_pct, mic_text=mic_text)
+        self.audio_test_label.setText("\n".join([summary, *describe_audio_sources(result)]))
+
+    @staticmethod
+    def _device_choice(combo: QComboBox) -> tuple[Optional[int], Optional[str]]:
+        """Return (index, name) of the chosen device; (None, None) = automatic."""
+        data = combo.currentData()
+        if isinstance(data, dict):
+            return data.get("index"), data.get("name")
+        return None, None
+
+    @staticmethod
+    def _select_device(combo: QComboBox, name: Optional[str], index: Optional[int]) -> None:
+        """Select a device by name (stable), falling back to a legacy index."""
+        for i in range(combo.count()):
+            data = combo.itemData(i)
+            if not isinstance(data, dict):
+                continue
+            if (name and data.get("name") == name) or (
+                not name and index is not None and data.get("index") == index
+            ):
+                combo.setCurrentIndex(i)
+                return

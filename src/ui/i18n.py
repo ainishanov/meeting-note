@@ -400,6 +400,17 @@ EN: dict[str, str] = {
     "Закрыть": "Close",
     "Не удалось открыть ссылку": "Could Not Open Link",
     "Откройте страницу вручную: {url}": "Open this page manually: {url}",
+    "Автоматически — все выходы (динамики, наушники)": "Automatic — all outputs (speakers, headphones)",
+    "Автоматически (как в Windows)": "Automatic (same as Windows)",
+    "В автоматическом режиме записываются динамики, наушники и гарнитура сразу — приложение само находит, куда идёт звук звонка, даже если вы подключите наушники во время встречи.": "Automatic mode records speakers, headphones and headsets at once — the app finds where the call sound plays, even if you plug in headphones during the meeting.",
+    "Звук собеседника слышен в: {source}.": "Call audio heard on: {source}.",
+    "Слушаю выходы: {names}. Включите любой звук, чтобы проверить.": "Listening to outputs: {names}. Play any sound to check.",
+    "Выходы звука не найдены — подключите наушники или колонки.": "No audio outputs found — connect headphones or speakers.",
+    "Микрофон: {name}.": "Microphone: {name}.",
+    "Звук встречи: {source}": "Meeting audio: {source}",
+    "Слушаю: {sources}": "Listening: {sources}",
+    "Выходы звука не найдены": "No audio outputs found",
+    "микрофон": "microphone",
 }
 
 

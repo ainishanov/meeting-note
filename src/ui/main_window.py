@@ -103,11 +103,12 @@ class RecorderSetupWorker(QThread):
 
     completed = Signal(object)  # AudioRecorder or Exception
 
-    def __init__(self, settings, on_level_change, on_state_change):
+    def __init__(self, settings, on_level_change, on_state_change, on_source_change=None):
         super().__init__()
         self.settings = settings
         self.on_level_change = on_level_change
         self.on_state_change = on_state_change
+        self.on_source_change = on_source_change
 
     def run(self):
         started_at = time.perf_counter()
@@ -124,15 +125,24 @@ class RecorderSetupWorker(QThread):
                 on_state_change=self.on_state_change,
                 microphone_enabled=mic_settings.get("enabled", True),
                 microphone_device_index=mic_settings.get("device_index"),
+                microphone_device_name=mic_settings.get("device_name"),
                 microphone_volume=mic_settings.get("volume", 1.0),
+                on_source_change=self.on_source_change,
             )
 
-            if self.settings.audio_device_index is not None:
-                recorder.set_device(self.settings.audio_device_index)
+            if self.settings.audio_device_name or self.settings.audio_device_index is not None:
+                recorder.set_device(self.settings.audio_device_index, self.settings.audio_device_name)
+
+            # Loads the audio system once here (the first load is the slow one),
+            # so pressing Record does not freeze the window.
+            outputs, microphones = recorder.get_capture_devices()
 
             logger.info(
-                f"Recorder initialized: mic_enabled={mic_settings.get('enabled')}, "
-                f"mic_device={mic_settings.get('device_index')}, "
+                f"Recorder initialized: outputs={[d.display_name for d in outputs]}, "
+                f"pinned_output={self.settings.audio_device_name or self.settings.audio_device_index}, "
+                f"mic_enabled={mic_settings.get('enabled')}, "
+                f"mic_device={mic_settings.get('device_name') or mic_settings.get('device_index')}, "
+                f"microphones={len(microphones)}, "
                 f"mic_volume={mic_settings.get('volume')}, "
                 f"elapsed={time.perf_counter() - started_at:.2f}s"
             )
@@ -362,6 +372,7 @@ class MainWindow(QMainWindow):
     # Signals for thread-safe UI updates from recording thread
     _audio_level_signal = Signal(float)
     _recording_state_signal = Signal(object)
+    _audio_source_signal = Signal(object)  # CaptureStatus from the capture thread
     _meeting_detected_signal = Signal(str)  # Thread-safe meeting detection
 
     def __init__(self):
@@ -388,6 +399,7 @@ class MainWindow(QMainWindow):
         # Connect signals for thread-safe updates
         self._audio_level_signal.connect(self._update_audio_level_ui)
         self._recording_state_signal.connect(self._update_recording_state_ui)
+        self._audio_source_signal.connect(self._update_audio_source_ui)
         self._meeting_detected_signal.connect(self._show_notification_safe)
 
         self._setup_ui()
@@ -1053,6 +1065,7 @@ class MainWindow(QMainWindow):
             self.settings,
             self._on_audio_level_change,
             self._on_recording_state_change,
+            self._on_audio_source_change,
         )
         self._recorder_setup_worker.completed.connect(self._on_recorder_setup_finished)
         self._recorder_setup_worker.start()
@@ -1432,6 +1445,14 @@ class MainWindow(QMainWindow):
     def _on_recording_state_change(self, state: object):
         """Handle recording state changes from recording thread (emit signal)."""
         self._recording_state_signal.emit(state)
+
+    def _on_audio_source_change(self, status: object):
+        """Handle capture source changes from the capture thread (emit signal)."""
+        self._audio_source_signal.emit(status)
+
+    def _update_audio_source_ui(self, status: object):
+        """Show which outputs are recorded and where the call is heard."""
+        self.recording_widget.set_audio_source(status)
 
     def _update_recording_state_ui(self, state: object):
         """Update recording state UI (called in main thread via signal)."""
@@ -1826,14 +1847,17 @@ class MainWindow(QMainWindow):
             elif self.recorder is not None:
                 self.recorder.sample_rate = self.settings.sample_rate
                 self.recorder.channels = self.settings.channels
-                if self.settings.audio_device_index is not None:
-                    self.recorder.set_device(self.settings.audio_device_index)
+                if self.settings.audio_device_name or self.settings.audio_device_index is not None:
+                    self.recorder.set_device(
+                        self.settings.audio_device_index, self.settings.audio_device_name
+                    )
                 else:
                     self.recorder.set_default_device()
                 self.recorder.set_microphone(
                     device_index=mic_settings.get("device_index"),
                     enabled=mic_settings.get("enabled", True),
                     volume=mic_settings.get("volume", 1.0),
+                    device_name=mic_settings.get("device_name"),
                 )
 
             new_trigger_config = (

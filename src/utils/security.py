@@ -185,11 +185,12 @@ def get_microphone_settings() -> dict:
     Get microphone settings from storage.
 
     Returns:
-        Dict with microphone settings: enabled, device_index, volume
+        Dict with microphone settings: enabled, device_index, device_name, volume
     """
     defaults = {
         "enabled": True,
         "device_index": None,
+        "device_name": None,
         "volume": 1.0,
     }
     try:
@@ -204,7 +205,12 @@ def get_microphone_settings() -> dict:
         return defaults
 
 
-def set_microphone_settings(enabled: bool, device_index: Optional[int] = None, volume: float = 1.0) -> bool:
+def set_microphone_settings(
+    enabled: bool,
+    device_index: Optional[int] = None,
+    volume: float = 1.0,
+    device_name: Optional[str] = None,
+) -> bool:
     """
     Save microphone settings to storage.
 
@@ -212,6 +218,7 @@ def set_microphone_settings(enabled: bool, device_index: Optional[int] = None, v
         enabled: Whether microphone recording is enabled
         device_index: Microphone device index (None for default)
         volume: Microphone volume multiplier (0.0 - 2.0)
+        device_name: Microphone name; survives index changes (None for default)
 
     Returns:
         True if saved successfully
@@ -220,10 +227,14 @@ def set_microphone_settings(enabled: bool, device_index: Optional[int] = None, v
         settings = {
             "enabled": enabled,
             "device_index": device_index,
+            "device_name": device_name,
             "volume": volume,
         }
         keyring.set_password(SERVICE_NAME, "microphone_settings", json.dumps(settings))
-        logger.info(f"Microphone settings saved: enabled={enabled}, device={device_index}, volume={volume}")
+        logger.info(
+            f"Microphone settings saved: enabled={enabled}, "
+            f"device={device_name or device_index or 'default'}, volume={volume}"
+        )
         return True
     except Exception as e:
         logger.error(f"Failed to save microphone settings: {e}")

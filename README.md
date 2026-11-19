@@ -1,5 +1,7 @@
 # Meeting Note
 
+Updated: 2026-11-19
+
 Records and summarizes calls.
 
 Meeting Note is a Windows desktop app that captures meeting audio, transcribes it,
@@ -22,7 +24,10 @@ compatibility still need broader testing.
 
 ## What It Does
 
-- Records system audio through WASAPI loopback.
+- Records system audio through WASAPI loopback from every output at once
+  (speakers, wired or USB headphones), so the call is captured wherever it plays.
+- Picks up headphones plugged in or out during a meeting without stopping the
+  recording and shows where the call sound is heard.
 - Optionally records and mixes microphone audio.
 - Detects meeting apps and can show a recording prompt.
 - Transcribes audio through OpenAI speech-to-text models.

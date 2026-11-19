@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.ui.i18n import SUPPORTED_LANGUAGES, tr
-from src.ui.settings_dialog import AudioTestWorker
+from src.ui.settings_dialog import AudioTestWorker, describe_audio_sources
 from src.ui.theme import (
     ACCENT_PRIMARY,
     ACCENT_PRIMARY_HOVER,
@@ -360,14 +360,17 @@ class OnboardingDialog(QDialog):
         self.skip_button.setEnabled(False)
         self.next_button.setEnabled(False)
         self.audio_result_label.setText(tr("Слушаю системный звук и микрофон…"))
+        microphone_settings = get_microphone_settings()
         self._audio_test_worker = AudioTestWorker(
             output_dir=self.settings.recordings_dir,
             sample_rate=self.settings.sample_rate,
             channels=self.settings.channels,
             audio_device_index=self.settings.audio_device_index,
+            audio_device_name=self.settings.audio_device_name,
             microphone_enabled=self.mic_checkbox.isChecked(),
-            microphone_device_index=self.settings.microphone_device_index,
-            microphone_volume=self.settings.microphone_volume,
+            microphone_device_index=microphone_settings.get("device_index"),
+            microphone_device_name=microphone_settings.get("device_name"),
+            microphone_volume=float(microphone_settings.get("volume", 1.0)),
         )
         self._audio_test_worker.finished.connect(self._on_audio_test_finished)
         self._audio_test_worker.start()
@@ -390,22 +393,19 @@ class OnboardingDialog(QDialog):
         microphone = result.get("microphone")
         mic_text = tr("выключен") if microphone is None else f"{int(microphone * 100)}%"
         if system_pct < 1 and (microphone is None or microphone < 0.01):
-            self.audio_result_label.setText(
-                tr(
-                    "Сигнал не найден. Включите звук на компьютере и повторите. "
-                    "Системный звук: {system_pct}%, микрофон: {mic_text}.",
-                    system_pct=system_pct,
-                    mic_text=mic_text,
-                )
+            summary = tr(
+                "Сигнал не найден. Включите звук на компьютере и повторите. "
+                "Системный звук: {system_pct}%, микрофон: {mic_text}.",
+                system_pct=system_pct,
+                mic_text=mic_text,
             )
         else:
-            self.audio_result_label.setText(
-                tr(
-                    "✓ Звук работает. Системный звук: {system_pct}%, микрофон: {mic_text}.",
-                    system_pct=system_pct,
-                    mic_text=mic_text,
-                )
+            summary = tr(
+                "✓ Звук работает. Системный звук: {system_pct}%, микрофон: {mic_text}.",
+                system_pct=system_pct,
+                mic_text=mic_text,
             )
+        self.audio_result_label.setText("\n".join([summary, *describe_audio_sources(result)]))
 
     def _finish_setup(self) -> None:
         openai_key = self.openai_key_input.text().strip()
@@ -424,6 +424,7 @@ class OnboardingDialog(QDialog):
             enabled=microphone_enabled,
             device_index=microphone_settings.get("device_index"),
             volume=float(microphone_settings.get("volume", 1.0)),
+            device_name=microphone_settings.get("device_name"),
         ):
             QMessageBox.warning(
                 self,

@@ -1,5 +1,7 @@
 # Troubleshooting
 
+Updated: 2026-11-19
+
 This guide focuses on safe checks that do not require sharing private meeting
 content.
 
@@ -7,18 +9,33 @@ content.
 
 1. Open `File -> Settings -> Audio`.
 2. Click `Refresh List`.
-3. Select a system audio device with loopback support.
-4. Click `Test Audio (3 sec)`.
-5. Confirm that Windows is playing audio through the selected output device.
+3. Keep `Automatic — all outputs (speakers, headphones)` selected.
+4. Click `Test Audio (3 sec)` while some sound is playing. The result names the
+   output where the sound was heard.
+5. Confirm that Windows lists the output under Sound settings.
 
-If no loopback device appears, update the audio driver or try another output
-device.
+If no output appears, update the audio driver or try another output device.
+
+## Call Is Not Recorded With Headphones
+
+By default the app records every output at once, so it does not matter whether
+the call plays through speakers or headphones. During a recording the panel
+shows `Meeting audio: <output>` once it hears the call.
+
+1. If the panel says `Listening: …` but never names an output, check that the
+   call app is not muted and plays through a Windows output (not Bluetooth
+   hands-free mode, which some headsets switch to during calls).
+2. If an output is pinned in `File -> Settings -> Audio`, switch back to
+   `Automatic — all outputs`.
+3. Plugging or unplugging headphones mid-meeting is handled automatically.
+   Changing the default microphone in Windows without plugging anything is not
+   detected until the next recording.
 
 ## Microphone Is Missing
 
 1. Open `File -> Settings -> Audio`.
 2. Enable `Record microphone`.
-3. Select the microphone manually instead of `Default`.
+3. Leave `Automatic (same as Windows)` or select the microphone manually.
 4. Check Windows microphone privacy settings.
 5. Run `Test Audio (3 sec)`.
 
