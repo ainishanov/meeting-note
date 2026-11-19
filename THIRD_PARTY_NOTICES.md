@@ -20,6 +20,20 @@ https://github.com/ainishanov/meeting-note. Users may rebuild the application
 against a compatible or modified Qt for Python version. Exact dependency
 versions used for an official release are recorded in `requirements-lock.txt`.
 
+## LAME MP3 encoder
+
+Audio is compressed to MP3 before upload with `lameenc`, a Python binding that
+contains the LAME encoder. `lameenc` is licensed under the GNU Lesser General
+Public License version 3 or later; LAME is licensed under the GNU Lesser General
+Public License version 2 or later. Meeting Note does not modify either project.
+
+- lameenc source: https://github.com/chrisstaite/lameenc
+- LAME project: https://lame.sourceforge.io/
+- LGPLv3 text: https://www.gnu.org/licenses/lgpl-3.0.html
+
+As with Qt for Python, users may rebuild the application against a compatible
+or modified version of these libraries.
+
 ## Other dependencies
 
 The application also uses packages under OSI-approved licenses, including

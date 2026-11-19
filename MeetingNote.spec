@@ -37,6 +37,7 @@ a = Analysis(
         'keyring.backends.Windows',
         'psutil',
         'pydub',
+        'lameenc',
         'win32gui',
         'win32process',
         'pynput',

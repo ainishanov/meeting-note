@@ -44,6 +44,53 @@ _HALLUCINATION_RE = re.compile(
 )
 
 
+UPLOAD_SAMPLE_RATE = 16000
+# 64 kbps mono MP3 keeps speech and voice timbre intact for diarization while
+# cutting each two-minute upload from 3.8 MB of WAV to about 0.96 MB. Uploads
+# through slow VPN links dropped mid-request at the WAV size.
+UPLOAD_MP3_BITRATE_KBPS = 64
+_mp3_fallback_logged = False
+
+
+class AudioUpload(io.BytesIO):
+    """Encoded audio bytes plus the filename and MIME type sent to the API."""
+
+    def __init__(self, data: bytes, filename: str, mime_type: str):
+        super().__init__(data)
+        self.filename = filename
+        self.mime_type = mime_type
+
+
+def encode_speech_for_upload(segment: AudioSegment, stem: str) -> AudioUpload:
+    """Return 16 kHz mono speech as MP3, or as WAV if no encoder is available."""
+    global _mp3_fallback_logged
+    speech = (
+        segment.set_channels(1)
+        .set_frame_rate(UPLOAD_SAMPLE_RATE)
+        .set_sample_width(2)
+    )
+    try:
+        import lameenc
+
+        encoder = lameenc.Encoder()
+        encoder.set_bit_rate(UPLOAD_MP3_BITRATE_KBPS)
+        encoder.set_in_sample_rate(UPLOAD_SAMPLE_RATE)
+        encoder.set_channels(1)
+        encoder.set_quality(2)
+        data = bytes(encoder.encode(speech.raw_data) + encoder.flush())
+        if data:
+            return AudioUpload(data, f"{stem}.mp3", "audio/mpeg")
+        raise RuntimeError("MP3 encoder returned no data")
+    except Exception as error:
+        if not _mp3_fallback_logged:
+            logger.warning(f"MP3 encoding unavailable, uploading WAV: {error}")
+            _mp3_fallback_logged = True
+
+    buffer = io.BytesIO()
+    speech.export(buffer, format="wav")
+    return AudioUpload(buffer.getvalue(), f"{stem}.wav", "audio/wav")
+
+
 @dataclass
 class TranscriptionResult:
     """Result of audio transcription."""
@@ -69,8 +116,8 @@ class Transcriber:
     # The Transcriptions API accepts files up to 25 MB.
     MAX_FILE_SIZE_MB = 25
     # Keep each upload small enough to survive slow or unstable connections.
-    # Two minutes of 16 kHz mono PCM is about 3.7 MiB; larger real-world chunks
-    # repeatedly lost the connection before diarization returned a response.
+    # Two minutes is about 0.9 MiB as MP3 (3.7 MiB as WAV); larger real-world
+    # chunks repeatedly lost the connection before diarization responded.
     MAX_CHUNK_DURATION = 120  # 2 minutes
     # Minimum RMS level for audio to be considered non-silent
     # Values below this threshold are likely silence or very quiet noise
@@ -256,7 +303,7 @@ class Transcriber:
         local_speaker: str,
         chunk_start_seconds: float,
     ) -> str:
-        """Create a 2-10 second WAV data URL containing one enrolled voice."""
+        """Create a 2-10 second audio data URL containing one enrolled voice."""
         matching_segments = [
             segment
             for segment in segments
@@ -318,16 +365,11 @@ class Transcriber:
                 frame_rate=reference.frame_rate,
             )
 
-        reference = (
-            reference[:max_duration_ms]
-            .set_channels(1)
-            .set_frame_rate(16000)
-            .set_sample_width(2)
-        )
-        buffer = io.BytesIO()
-        reference.export(buffer, format="wav")
-        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
-        return f"data:audio/wav;base64,{encoded}"
+        # References ride along with every diarized request, so compress them
+        # like the chunk itself. The API accepts the same formats as `file`.
+        upload = encode_speech_for_upload(reference[:max_duration_ms], "reference")
+        encoded = base64.b64encode(upload.getvalue()).decode("ascii")
+        return f"data:{upload.mime_type};base64,{encoded}"
 
     def _unknown_speaker_labels(
         self,
@@ -585,6 +627,8 @@ class Transcriber:
     ):
         """Send one bounded chunk with application-owned retry semantics."""
         client = self._get_client()
+        filename = getattr(buffer, "filename", "chunk.wav")
+        mime_type = getattr(buffer, "mime_type", "audio/wav")
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -592,7 +636,7 @@ class Transcriber:
                 return client.audio.transcriptions.create(
                     **self._build_transcription_params(
                         model,
-                        ("chunk.wav", buffer, "audio/wav"),
+                        (filename, buffer, mime_type),
                         language,
                         speaker_references=speaker_references,
                     )
@@ -794,6 +838,20 @@ class Transcriber:
             )
         )
 
+    def _compress_recording_for_upload(self, audio_path: Path) -> Optional[AudioUpload]:
+        """Compress a short WAV recording; other files are uploaded unchanged."""
+        if audio_path.suffix.lower() != ".wav":
+            return None
+        try:
+            # Open the file ourselves: pydub leaves its own handle open, which
+            # on Windows blocks deleting the recording afterwards.
+            with open(audio_path, "rb") as audio_file:
+                recording = AudioSegment.from_file(audio_file, format="wav")
+            return encode_speech_for_upload(recording, "recording")
+        except Exception as error:
+            logger.warning(f"Could not compress {audio_path.name} for upload: {error}")
+            return None
+
     def _transcribe_single(
         self,
         audio_path: Path,
@@ -807,18 +865,29 @@ class Transcriber:
             progress_callback(0, 1, f"Sending audio to {model}...")
 
         client = self._get_client()
+        upload = self._compress_recording_for_upload(audio_path)
 
         try:
             max_retries = 3
             response = None
             for attempt in range(max_retries):
                 try:
-                    with open(audio_path, "rb") as audio_file:
+                    if upload is not None:
+                        upload.seek(0)
                         response = client.audio.transcriptions.create(
                             **self._build_transcription_params(
-                                model, audio_file, language
+                                model,
+                                (upload.filename, upload, upload.mime_type),
+                                language,
                             )
                         )
+                    else:
+                        with open(audio_path, "rb") as audio_file:
+                            response = client.audio.transcriptions.create(
+                                **self._build_transcription_params(
+                                    model, audio_file, language
+                                )
+                            )
                     break
                 except Exception as e:
                     if (
@@ -947,6 +1016,7 @@ class Transcriber:
             )
 
         skipped_chunks = 0
+        upload_size_logged = False
         for i in range(num_chunks):
             output_start_ms = i * chunk_duration_ms
             start_ms = output_start_ms
@@ -1027,21 +1097,21 @@ class Transcriber:
                     )
                 continue
 
-            # Export chunk to bytes with explicit format parameters
-            # Whisper requires: 16-bit PCM, mono, 16kHz sample rate
-            buffer = io.BytesIO()
+            # Upload 16 kHz mono speech, compressed to keep requests small.
+            # Speaker references are cut from this same mono 16 kHz chunk.
             try:
-                # Convert to mono if stereo
                 if chunk.channels > 1:
                     chunk = chunk.set_channels(1)
-                # Resample to 16kHz if needed (Whisper optimal)
-                if chunk.frame_rate != 16000:
-                    chunk = chunk.set_frame_rate(16000)
-                # Export as 16-bit PCM WAV (default format for pydub)
-                chunk.export(buffer, format="wav")
-                buffer.seek(0)
-                chunk_size = len(buffer.getvalue())
-                logger.debug(f"Chunk {i + 1} exported: {chunk_size / 1024:.1f} KB (mono, 16kHz)")
+                if chunk.frame_rate != UPLOAD_SAMPLE_RATE:
+                    chunk = chunk.set_frame_rate(UPLOAD_SAMPLE_RATE)
+                buffer = encode_speech_for_upload(chunk, "chunk")
+                chunk_size_kb = len(buffer.getvalue()) / 1024
+                log_upload = logger.info if not upload_size_logged else logger.debug
+                log_upload(
+                    f"Chunk {i + 1} upload: {chunk_size_kb:.0f} KB "
+                    f"({buffer.filename}, mono 16 kHz)"
+                )
+                upload_size_logged = True
             except Exception as e:
                 logger.error(f"Failed to export chunk {i + 1}: {e}")
                 raise

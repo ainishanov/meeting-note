@@ -40,6 +40,8 @@ psutil>=5.9.0
 
 # Audio processing for chunked transcription
 pydub>=0.25.1
+# MP3 encoding of upload chunks (4x smaller than WAV; no ffmpeg needed)
+lameenc>=1.8.0
 
 # Window title detection
 pywin32>=306

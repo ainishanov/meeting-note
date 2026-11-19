@@ -1,5 +1,6 @@
 import base64
 import io
+import sys
 import tempfile
 import unittest
 import wave
@@ -13,6 +14,7 @@ from pydub import AudioSegment
 from src.core.database import TranscriptSegment
 from src.core.transcriber import Transcriber
 from src.ui.main_window import MainWindow
+from tests.mp3_frames import MPEG2_LAYER3_SAMPLES_PER_FRAME, mp3_frame_headers
 
 
 def segment(speaker, start, end, text):
@@ -65,6 +67,24 @@ class TranscriberSpeakerNormalizationTest(unittest.TestCase):
             "A",
             chunk_start_seconds=0.0,
         )
+
+        prefix = "data:audio/mpeg;base64,"
+        self.assertTrue(reference.startswith(prefix))
+        frames = mp3_frame_headers(base64.b64decode(reference[len(prefix) :]))
+        self.assertEqual({frame.sample_rate for frame in frames}, {16000})
+        self.assertTrue(all(frame.mono for frame in frames))
+        duration = len(frames) * MPEG2_LAYER3_SAMPLES_PER_FRAME / 16000
+        self.assertGreaterEqual(duration, 2.0)
+        self.assertLessEqual(duration, 10.0)
+
+    def test_speaker_reference_falls_back_to_wav_without_mp3_encoder(self):
+        segments = [segment("A", 0.0, 1.0, "Короткая реплика")]
+        audio = AudioSegment.silent(duration=3000, frame_rate=16000)
+
+        with patch.dict(sys.modules, {"lameenc": None}):
+            reference = self.transcriber._build_speaker_reference(
+                audio, segments, "A", chunk_start_seconds=0.0,
+            )
 
         prefix = "data:audio/wav;base64,"
         self.assertTrue(reference.startswith(prefix))

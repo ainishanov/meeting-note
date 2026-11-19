@@ -12,6 +12,14 @@
 - `scripts/generate_app_icons.py` rebuilds `assets/app_icon.ico`, the site
   favicon and the site icons from the SVG sources.
 
+### Fixed
+
+- Transcription no longer fails with "Connection error" on slow uploads such
+  as a VPN: audio is sent to OpenAI as compressed MP3 (64 kbps, mono, 16 kHz)
+  instead of WAV, so each two-minute piece is about 0.9 MB instead of 3.8 MB.
+  Speaker voice samples and short recordings are compressed too. If the MP3
+  encoder is missing, the app falls back to WAV as before.
+
 ## 0.3.3 — 2026-11-19
 
 ### Fixed

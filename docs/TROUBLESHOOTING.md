@@ -43,9 +43,17 @@ shows `Meeting audio: <output>` once it hears the call.
 
 1. Check that `OPENAI_API_KEY` is configured or set it in
    `File -> Settings -> API`.
-2. Check account balance and model access.
-3. Try a shorter recording.
-4. Retry transcription from the recording view.
+2. Check account balance and model access. "You have no credits remaining"
+   or `credit_balance_exhausted` means the OpenAI balance is empty: add
+   credits at platform.openai.com, then retry.
+3. "The connection to OpenAI was interrupted" usually means a slow upload,
+   for example through a VPN. The app sends audio as compressed MP3 pieces of
+   about 0.9 MB; `data/meeting_note.log` shows the size of each upload
+   ("Chunk 1 upload: ... KB"). If uploads still drop, try another VPN server
+   or a connection with faster upload.
+4. Try a shorter recording.
+5. Retry transcription from the recording view. The recording is kept, and
+   finished pieces are not sent again.
 
 ## Summary Fails
 
