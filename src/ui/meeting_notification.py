@@ -14,11 +14,13 @@ from PySide6.QtWidgets import (
 )
 
 from src.ui.theme import (
-    BG_OVERLAY, BG_SURFACE_3, BG_SURFACE_4,
-    BORDER_DEFAULT, BORDER_SUBTLE,
+    BG_HOVER, BG_OVERLAY, BG_PRESSED, BG_SURFACE_1,
+    BORDER_DEFAULT, BORDER_STRONG, BORDER_SUBTLE,
     RADIUS_MD, RADIUS_XL,
+    SHADOW_RGBA,
     STATUS_RECORDING,
-    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY,
+    TEXT_ON_ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY,
+    hover_color, pressed_color, tint,
 )
 from src.ui.i18n import tr
 
@@ -59,40 +61,38 @@ class MeetingNotificationWidget(QWidget):
         self.content = QWidget()
         self.content.setObjectName("content")
         content_layout = QVBoxLayout(self.content)
-        content_layout.setContentsMargins(20, 18, 20, 18)
-        content_layout.setSpacing(12)
+        content_layout.setContentsMargins(18, 16, 14, 14)
+        content_layout.setSpacing(14)
 
-        # Header
+        # Header: icon badge, title with the app name under it, close button
         header_layout = QHBoxLayout()
-        header_layout.setSpacing(10)
+        header_layout.setSpacing(12)
 
         self.icon_label = QLabel("📹")
-        self.icon_label.setStyleSheet("font-size: 26px;")
-        header_layout.addWidget(self.icon_label)
+        self.icon_label.setObjectName("icon_badge")
+        self.icon_label.setFixedSize(40, 40)
+        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_layout.addWidget(self.icon_label, alignment=Qt.AlignmentFlag.AlignTop)
 
+        title_column = QVBoxLayout()
+        title_column.setSpacing(1)
         self.title_label = QLabel(tr("Обнаружен созвон"))
         self.title_label.setStyleSheet(f"font-weight: 600; font-size: 15px; color: {TEXT_PRIMARY};")
-        header_layout.addWidget(self.title_label, stretch=1)
+        title_column.addWidget(self.title_label)
+
+        self.app_label = QLabel("Zoom")
+        self.app_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 12px;")
+        title_column.addWidget(self.app_label)
+        header_layout.addLayout(title_column, stretch=1)
 
         self.close_btn = QPushButton("✕")
         self.close_btn.setObjectName("close_btn")
         self.close_btn.setFixedSize(28, 28)
         self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.close_btn.clicked.connect(self.hide_notification)
-        header_layout.addWidget(self.close_btn)
+        header_layout.addWidget(self.close_btn, alignment=Qt.AlignmentFlag.AlignTop)
 
         content_layout.addLayout(header_layout)
-
-        # App name
-        self.app_label = QLabel("Zoom")
-        self.app_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 12px;")
-        content_layout.addWidget(self.app_label)
-
-        # Separator
-        separator = QWidget()
-        separator.setFixedHeight(1)
-        separator.setStyleSheet(f"background-color: {BORDER_SUBTLE};")
-        content_layout.addWidget(separator)
 
         # Buttons
         buttons_layout = QHBoxLayout()
@@ -117,22 +117,28 @@ class MeetingNotificationWidget(QWidget):
 
         # Hint
         self.hint_label = QLabel(tr("Автоматически скроется через 30 сек"))
-        self.hint_label.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 10px;")
+        self.hint_label.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 11px;")
         self.hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         content_layout.addWidget(self.hint_label)
 
         layout.addWidget(self.content)
-        self.setFixedSize(340, 200)
+        self.setFixedSize(380, 214)
 
     def _setup_styles(self):
         self.setStyleSheet(f"""
             #content {{
                 background-color: {BG_OVERLAY};
                 border-radius: {RADIUS_XL}px;
-                border: 1px solid {BORDER_DEFAULT};
+                border: 1px solid {BORDER_SUBTLE};
             }}
             QLabel {{
                 color: {TEXT_PRIMARY};
+                background: transparent;
+            }}
+            #icon_badge {{
+                background-color: {tint(STATUS_RECORDING, 0.12)};
+                border-radius: 20px;
+                font-size: 19px;
             }}
             QPushButton {{
                 border-radius: {RADIUS_MD}px;
@@ -144,35 +150,45 @@ class MeetingNotificationWidget(QWidget):
                 color: {TEXT_TERTIARY};
                 border: none;
                 border-radius: 14px;
+                padding: 0;
             }}
             #close_btn:hover {{
                 color: {TEXT_PRIMARY};
-                background-color: {BG_SURFACE_4};
+                background-color: {BG_HOVER};
             }}
             #dismiss_btn {{
-                background-color: {BG_SURFACE_3};
+                background-color: {BG_SURFACE_1};
                 color: {TEXT_PRIMARY};
                 border: 1px solid {BORDER_DEFAULT};
                 padding: 8px 16px;
             }}
             #dismiss_btn:hover {{
-                background-color: {BG_SURFACE_4};
+                background-color: {BG_HOVER};
+                border-color: {BORDER_STRONG};
+            }}
+            #dismiss_btn:pressed {{
+                background-color: {BG_PRESSED};
             }}
             #record_btn {{
                 background-color: {STATUS_RECORDING};
-                color: #ffffff;
-                border: none;
+                color: {TEXT_ON_ACCENT};
+                border: 1px solid {STATUS_RECORDING};
                 padding: 8px 16px;
             }}
             #record_btn:hover {{
-                background-color: #e05555;
+                background-color: {hover_color(STATUS_RECORDING)};
+                border-color: {hover_color(STATUS_RECORDING)};
+            }}
+            #record_btn:pressed {{
+                background-color: {pressed_color(STATUS_RECORDING)};
+                border-color: {pressed_color(STATUS_RECORDING)};
             }}
         """)
 
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(30)
-        shadow.setColor(QColor(0, 0, 0, 100))
-        shadow.setOffset(0, 6)
+        shadow.setBlurRadius(32)
+        shadow.setColor(QColor(*SHADOW_RGBA))
+        shadow.setOffset(0, 8)
         self.content.setGraphicsEffect(shadow)
 
     def show_notification(self, app_name: str, app_icon: str = "📹"):

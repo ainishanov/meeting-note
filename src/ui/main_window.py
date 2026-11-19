@@ -13,6 +13,7 @@ from PySide6.QtCore import QTimer, Qt, Signal, QThread
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
     QApplication,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -418,9 +419,11 @@ class MainWindow(QMainWindow):
     def _setup_ui(self):
         """Initialize the user interface."""
         from src.ui.theme import (
-            BG_BASE, BG_SURFACE_1,
+            ACCENT_PRIMARY,
+            BG_FIELD, BG_HOVER, BG_SURFACE_1, BG_SURFACE_3,
+            BORDER_SUBTLE,
+            RADIUS_LG, RADIUS_MD,
             TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY,
-            SPACE_SM, SPACE_MD,
         )
 
         self.setWindowTitle("Meeting Note")
@@ -433,32 +436,63 @@ class MainWindow(QMainWindow):
 
         # Main layout
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(8, 8, 8, 0)
+        main_layout.setContentsMargins(12, 4, 12, 12)
         main_layout.setSpacing(0)
 
         # Splitter for left panel and content
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
         main_layout.addWidget(splitter)
 
-        # Left panel - History
-        left_panel = QWidget()
-        left_panel.setStyleSheet(f"background-color: {BG_SURFACE_1}; border-radius: 12px;")
+        # Left panel - History (a single card; styles are scoped by object
+        # name so they do not cascade into the search field or the list)
+        left_panel = QFrame()
+        left_panel.setObjectName("historyPanel")
+        left_panel.setMinimumWidth(240)
+        left_panel.setStyleSheet(f"""
+            QFrame#historyPanel {{
+                background-color: {BG_SURFACE_1};
+                border: 1px solid {BORDER_SUBTLE};
+                border-radius: {RADIUS_LG}px;
+            }}
+        """)
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(12, 12, 12, 12)
-        left_layout.setSpacing(8)
+        left_layout.setContentsMargins(12, 16, 12, 10)
+        left_layout.setSpacing(10)
 
         history_label = QLabel(tr("История записей"))
-        history_label.setStyleSheet(f"font-weight: 600; font-size: 14px; color: {TEXT_PRIMARY}; background: transparent;")
+        history_label.setStyleSheet(
+            f"font-weight: 600; font-size: 15px; color: {TEXT_PRIMARY}; padding-left: 4px;"
+        )
         left_layout.addWidget(history_label)
 
         self.history_search_input = QLineEdit()
         self.history_search_input.setPlaceholderText(tr("Поиск по встречам..."))
-        self.history_search_input.setFixedHeight(34)
+        self.history_search_input.setFixedHeight(36)
+        self.history_search_input.setClearButtonEnabled(True)
+        self.history_search_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {BG_SURFACE_3};
+                border: 1px solid transparent;
+                border-radius: {RADIUS_MD}px;
+                padding: 0 12px;
+            }}
+            QLineEdit:hover {{
+                border-color: transparent;
+                background-color: {BG_HOVER};
+            }}
+            QLineEdit:focus {{
+                background-color: {BG_FIELD};
+                border-color: {ACCENT_PRIMARY};
+            }}
+        """)
         self.history_search_input.textChanged.connect(self._on_history_search_changed)
         left_layout.addWidget(self.history_search_input)
 
         self.history_search_status = QLabel("")
-        self.history_search_status.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 11px; background: transparent;")
+        self.history_search_status.setStyleSheet(
+            f"color: {TEXT_TERTIARY}; font-size: 11px; padding-left: 4px;"
+        )
         self.history_search_status.setVisible(False)
         left_layout.addWidget(self.history_search_status)
 
@@ -472,15 +506,15 @@ class MainWindow(QMainWindow):
             QPushButton {{
                 background-color: transparent;
                 color: {TEXT_SECONDARY};
-                border: 1px solid {BG_SURFACE_1};
-                border-radius: 8px;
-                padding: 8px 10px;
+                border: none;
+                border-top: 1px solid {BORDER_SUBTLE};
+                border-radius: 0;
+                padding: 10px 6px 4px 6px;
                 text-align: left;
+                font-weight: 500;
             }}
             QPushButton:hover {{
-                color: {TEXT_PRIMARY};
-                border-color: {TEXT_TERTIARY};
-                background-color: {BG_SURFACE_1};
+                color: {ACCENT_PRIMARY};
             }}
         """)
         self.feedback_button.clicked.connect(self._open_feedback)
@@ -491,8 +525,8 @@ class MainWindow(QMainWindow):
         # Right panel - Recording and Transcript
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(8, 0, 0, 0)
-        right_layout.setSpacing(8)
+        right_layout.setContentsMargins(6, 0, 0, 0)
+        right_layout.setSpacing(10)
 
         # Recording controls
         self.recording_widget = RecordingWidget()
@@ -505,7 +539,7 @@ class MainWindow(QMainWindow):
         splitter.addWidget(right_panel)
 
         # Set splitter proportions
-        splitter.setSizes([280, 720])
+        splitter.setSizes([300, 760])
 
         # Status bar
         self.status_bar = QStatusBar()

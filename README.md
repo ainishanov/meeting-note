@@ -95,6 +95,10 @@ in Windows Credential Manager when configured through the UI.
 The public interface defaults to English. Change the UI language in
 `File -> Settings -> General -> Language`; restart the app after saving.
 
+The app follows the Windows light or dark mode. To pick one yourself, set the
+environment variable `MEETING_NOTE_THEME` to `light` or `dark` before starting
+the app.
+
 ## Configuration
 
 Create `.env` from `.env.example` and fill in local values:

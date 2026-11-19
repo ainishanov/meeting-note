@@ -3,7 +3,7 @@
 from typing import Optional
 
 from loguru import logger
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
@@ -19,14 +19,13 @@ from PySide6.QtWidgets import (
 from src.core.database import Recording
 from src.core.recording_titles import display_recording_title, format_recording_title
 from src.ui.theme import (
-    ACCENT_PRIMARY,
-    BG_BASE, BG_SURFACE_2, BG_SURFACE_3,
-    BORDER_DEFAULT,
+    ACCENT_SOFT,
+    BG_HOVER,
     FONT_MONO,
-    RADIUS_LG, RADIUS_SM,
+    RADIUS_MD,
     STATUS_BADGE,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY,
-    badge_style, _hex_to_rgba,
+    badge_style,
 )
 from src.ui.i18n import tr
 
@@ -53,6 +52,31 @@ def _is_active_recording_or_processing(
     }
 
 
+class _ElidedLabel(QLabel):
+    """One-line label that ends in "…" instead of widening the sidebar."""
+
+    def __init__(self, text: str, parent=None):
+        super().__init__(text, parent)
+        self._full_text = text
+        self.setWordWrap(False)
+
+    def minimumSizeHint(self) -> QSize:
+        hint = super().minimumSizeHint()
+        return QSize(0, hint.height())
+
+    def sizeHint(self) -> QSize:
+        hint = super().sizeHint()
+        return QSize(0, hint.height())
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        elided = self.fontMetrics().elidedText(
+            self._full_text, Qt.TextElideMode.ElideRight, max(0, self.width())
+        )
+        if elided != self.text():
+            super().setText(elided)
+
+
 class RecordingListItem(QWidget):
     """Custom widget for recording list item with card design."""
 
@@ -76,7 +100,7 @@ class RecordingListItem(QWidget):
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(6)
+        layout.setSpacing(5)
 
         # Row 1: semantic title. Status moves to the metadata row so longer
         # topics remain readable in the sidebar.
@@ -87,12 +111,11 @@ class RecordingListItem(QWidget):
         display_title = display_recording_title(self.recording)
 
         title_color = TEXT_TERTIARY if self._file_missing else TEXT_PRIMARY
-        self.title_label = QLabel(display_title)
+        self.title_label = _ElidedLabel(display_title)
         self.title_label.setStyleSheet(f"""
             font-weight: 600; font-size: 13px; color: {title_color};
             background: transparent;
         """)
-        self.title_label.setWordWrap(False)
         self.title_label.setToolTip(display_title)
 
         top_row.addWidget(self.title_label, stretch=1)
@@ -200,23 +223,27 @@ class HistoryListWidget(QWidget):
         self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list_widget.customContextMenuRequested.connect(self._show_context_menu)
         self.list_widget.itemClicked.connect(self._on_item_clicked)
+        self.list_widget.setFrameShape(QListWidget.Shape.NoFrame)
+        # Rows follow the sidebar width; long titles are elided, never scrolled.
+        self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.list_widget.viewport().setAutoFillBackground(False)
         self.list_widget.setStyleSheet(f"""
             QListWidget {{
-                background-color: {BG_BASE};
+                background-color: transparent;
                 border: none;
                 outline: none;
             }}
             QListWidget::item {{
-                padding: 2px 4px;
-                margin-bottom: 4px;
+                padding: 0;
+                margin-bottom: 2px;
                 border: none;
-                border-radius: {RADIUS_LG}px;
+                border-radius: {RADIUS_MD}px;
             }}
             QListWidget::item:selected {{
-                background-color: {_hex_to_rgba(ACCENT_PRIMARY, 38)};
+                background-color: {ACCENT_SOFT};
             }}
             QListWidget::item:hover:!selected {{
-                background-color: {BG_SURFACE_2};
+                background-color: {BG_HOVER};
             }}
         """)
 
@@ -225,7 +252,9 @@ class HistoryListWidget(QWidget):
         # Empty state label (hidden by default)
         self._empty_label = QLabel(tr("Нет записей\nНажмите кнопку для начала"))
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._empty_label.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 13px;")
+        self._empty_label.setStyleSheet(
+            f"color: {TEXT_TERTIARY}; font-size: 13px; line-height: 1.5; padding: 24px 8px;"
+        )
         self._empty_label.setVisible(False)
         layout.addWidget(self._empty_label)
 
@@ -267,7 +296,8 @@ class HistoryListWidget(QWidget):
                 match_text=match_text,
                 processing_text=processing_text,
             )
-            item.setSizeHint(widget.sizeHint())
+            # Width 0: the row takes the list's width instead of its widest title.
+            item.setSizeHint(QSize(0, widget.sizeHint().height()))
 
             self.list_widget.addItem(item)
             self.list_widget.setItemWidget(item, widget)

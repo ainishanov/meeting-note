@@ -82,8 +82,8 @@ class MeetingNoteApp:
 
         self._start_single_instance_server()
 
-        # Set dark theme
-        self._set_dark_theme()
+        # Light or dark look, following the Windows app theme
+        self._apply_theme()
 
         completed_onboarding_now = False
 
@@ -235,10 +235,10 @@ class MeetingNoteApp:
             pass
         socket.deleteLater()
 
-    def _set_dark_theme(self) -> None:
-        """Apply dark theme to the application."""
-        from src.ui.theme import get_global_stylesheet
-        self._app.setStyleSheet(get_global_stylesheet())
+    def _apply_theme(self) -> None:
+        """Apply the app palette and stylesheet (light or dark, per Windows)."""
+        from src.ui.theme import apply_theme
+        apply_theme(self._app)
 
     def _setup_tray(self) -> None:
         """Setup system tray icon."""

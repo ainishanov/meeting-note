@@ -11,6 +11,15 @@
   of the Python icon, including with the Microsoft Store Python.
 - `scripts/generate_app_icons.py` rebuilds `assets/app_icon.ico`, the site
   favicon and the site icons from the SVG sources.
+- Lighter, more modern look. Panels are soft white cards on a pale background
+  with one violet accent, rounded corners and calmer text colors. The record
+  button, player, tabs, history list, summary cards, settings, onboarding,
+  feedback and privacy windows and the "call detected" pop-up all share the
+  same style.
+- The app follows the Windows light or dark mode. Set the environment variable
+  `MEETING_NOTE_THEME=light` or `dark` to choose one yourself.
+- Long meeting titles in the history list now end in "…" in a narrow window
+  instead of pushing the length and status off the edge.
 
 ### Fixed
 

@@ -34,14 +34,21 @@ from src.core.recording_titles import display_recording_title
 from src.ui.theme import (
     ACCENT_PRIMARY, ACCENT_PRIMARY_HOVER, ACCENT_PRIMARY_PRESSED,
     ACCENT_SECONDARY,
-    BG_BASE, BG_SURFACE_1, BG_SURFACE_2, BG_SURFACE_3, BG_SURFACE_4,
-    BORDER_DEFAULT, BORDER_SUBTLE,
+    BG_SURFACE_1, BG_SURFACE_3, BG_SURFACE_4,
+    BORDER_SUBTLE,
     FONT_MONO,
-    RADIUS_LG, RADIUS_MD, RADIUS_SM, RADIUS_ROUND,
+    HIGHLIGHT_BG, HIGHLIGHT_FG,
+    IS_DARK,
+    RADIUS_LG, RADIUS_MD, RADIUS_ROUND,
     SPEAKER_COLORS,
     STATUS_ERROR, STATUS_PAUSED, STATUS_SUCCESS,
-    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY, TEXT_INVERSE,
+    TEXT_ON_ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY,
     _hex_to_rgba,
+    danger_button_style,
+    primary_button_style,
+    readable_on_surface,
+    secondary_button_style,
+    tint,
 )
 from src.ui.i18n import tr
 
@@ -77,25 +84,21 @@ class TranscriptViewWidget(QWidget):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
-        # Header
+        # Header (styles scoped by object name so they stay on the card)
         header_frame = QFrame()
-        header_frame.setStyleSheet(f"""
-            QFrame {{
-                background-color: {BG_SURFACE_2};
-                border-radius: {RADIUS_LG}px;
-            }}
-        """)
+        header_frame.setObjectName("transcriptHeader")
+        header_frame.setStyleSheet(_card_style("transcriptHeader"))
         header_layout = QVBoxLayout(header_frame)
-        header_layout.setContentsMargins(20, 16, 20, 16)
+        header_layout.setContentsMargins(22, 18, 22, 16)
         header_layout.setSpacing(12)
 
         # Title
         self.title_label = QLabel(tr("Выберите запись"))
         self.title_label.setStyleSheet(f"""
-            font-size: 20px; font-weight: 600; color: {TEXT_PRIMARY};
+            font-size: 21px; font-weight: 600; color: {TEXT_PRIMARY};
             background: transparent; padding: 0;
         """)
         header_layout.addWidget(self.title_label)
@@ -103,7 +106,8 @@ class TranscriptViewWidget(QWidget):
         # Progress bar (hidden)
         self.progress_frame = QFrame()
         self.progress_frame.setVisible(False)
-        self.progress_frame.setStyleSheet("background: transparent; border: none;")
+        self.progress_frame.setObjectName("progressFrame")
+        self.progress_frame.setStyleSheet("QFrame#progressFrame { background: transparent; border: none; }")
         progress_layout = QVBoxLayout(self.progress_frame)
         progress_layout.setContentsMargins(0, 4, 0, 4)
         progress_layout.setSpacing(4)
@@ -116,20 +120,17 @@ class TranscriptViewWidget(QWidget):
         self.progress_bar.setMinimum(0)
         self.progress_bar.setMaximum(100)
         self.progress_bar.setValue(0)
-        self.progress_bar.setTextVisible(True)
-        self.progress_bar.setFixedHeight(8)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setFixedHeight(6)
         self.progress_bar.setStyleSheet(f"""
             QProgressBar {{
-                background-color: {BG_SURFACE_1};
+                background-color: {BG_SURFACE_3};
                 border: none;
-                border-radius: {RADIUS_SM}px;
-                text-align: center;
-                color: {TEXT_PRIMARY};
-                font-size: 10px;
+                border-radius: 3px;
             }}
             QProgressBar::chunk {{
                 background-color: {ACCENT_PRIMARY};
-                border-radius: {RADIUS_SM}px;
+                border-radius: 3px;
             }}
         """)
         progress_layout.addWidget(self.progress_bar)
@@ -137,19 +138,10 @@ class TranscriptViewWidget(QWidget):
         self._delete_missing_button = QPushButton(tr("Удалить из истории"))
         self._delete_missing_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._delete_missing_button.setVisible(False)
-        self._delete_missing_button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {STATUS_ERROR};
-                color: #ffffff;
-                border: none;
-                border-radius: {RADIUS_MD}px;
-                padding: 6px 14px;
-                font-size: 12px;
-                font-weight: 600;
-                min-width: 0;
-            }}
-            QPushButton:hover {{ background-color: #e05555; }}
-        """)
+        self._delete_missing_button.setStyleSheet(
+            danger_button_style(radius=RADIUS_MD, padding="7px 14px")
+            + "QPushButton { font-size: 12px; }"
+        )
         progress_layout.addWidget(self._delete_missing_button)
 
         header_layout.addWidget(self.progress_frame)
@@ -159,29 +151,11 @@ class TranscriptViewWidget(QWidget):
         buttons_layout.setSpacing(8)
         buttons_layout.addStretch()
 
-        # Ghost button style (also used in _reset_copy_button)
-        self._ghost_btn_style = f"""
-            QPushButton {{
-                background-color: transparent;
-                border: 1px solid {BORDER_DEFAULT};
-                border-radius: {RADIUS_MD}px;
-                padding: 8px 16px;
-                font-size: 13px;
-                color: {TEXT_SECONDARY};
-            }}
-            QPushButton:hover {{
-                background-color: {BG_SURFACE_3};
-                color: {TEXT_PRIMARY};
-                border: 1px solid {TEXT_TERTIARY};
-            }}
-            QPushButton:pressed {{
-                background-color: {BG_SURFACE_4};
-            }}
-            QPushButton:disabled {{
-                color: {TEXT_TERTIARY};
-                border: 1px solid {BG_SURFACE_3};
-            }}
-        """
+        # Quiet outlined button style (also used in _reset_copy_button)
+        self._ghost_btn_style = (
+            secondary_button_style(radius=RADIUS_MD, padding="7px 16px")
+            + "QPushButton { font-size: 13px; }"
+        )
         ghost_btn_style = self._ghost_btn_style
 
         # Retry button
@@ -192,16 +166,20 @@ class TranscriptViewWidget(QWidget):
         self.retry_button.clicked.connect(self._on_retry_clicked)
         self.retry_button.setStyleSheet(f"""
             QPushButton {{
-                background-color: {STATUS_PAUSED};
-                border: none;
+                background-color: {_hex_to_rgba(STATUS_PAUSED, 46 if IS_DARK else 30)};
+                border: 1px solid transparent;
                 border-radius: {RADIUS_MD}px;
-                padding: 8px 16px;
+                padding: 7px 16px;
                 font-size: 13px;
-                color: {TEXT_INVERSE};
+                color: {readable_on_surface(STATUS_PAUSED)};
                 font-weight: 600;
             }}
-            QPushButton:hover {{ background-color: #ffe066; }}
-            QPushButton:pressed {{ background-color: #f0c030; }}
+            QPushButton:hover {{
+                background-color: {_hex_to_rgba(STATUS_PAUSED, 70 if IS_DARK else 52)};
+            }}
+            QPushButton:pressed {{
+                background-color: {_hex_to_rgba(STATUS_PAUSED, 90 if IS_DARK else 72)};
+            }}
         """)
         buttons_layout.addWidget(self.retry_button)
 
@@ -216,7 +194,7 @@ class TranscriptViewWidget(QWidget):
         # Export format
         self.export_format = QComboBox()
         self.export_format.addItems(["TXT", "MD", "DOCX"])
-        self.export_format.setFixedWidth(75)
+        self.export_format.setFixedWidth(100)
         buttons_layout.addWidget(self.export_format)
 
         # Export button
@@ -224,23 +202,10 @@ class TranscriptViewWidget(QWidget):
         self.export_button.setEnabled(False)
         self.export_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.export_button.clicked.connect(self._on_export_clicked)
-        self.export_button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {ACCENT_PRIMARY};
-                border: none;
-                border-radius: {RADIUS_MD}px;
-                padding: 8px 16px;
-                font-size: 13px;
-                color: #ffffff;
-                font-weight: 600;
-            }}
-            QPushButton:hover {{ background-color: {ACCENT_PRIMARY_HOVER}; }}
-            QPushButton:pressed {{ background-color: {ACCENT_PRIMARY_PRESSED}; }}
-            QPushButton:disabled {{
-                background-color: {BG_SURFACE_3};
-                color: {TEXT_TERTIARY};
-            }}
-        """)
+        self.export_button.setStyleSheet(
+            primary_button_style(radius=RADIUS_MD, padding="7px 18px")
+            + "QPushButton { font-size: 13px; }"
+        )
         buttons_layout.addWidget(self.export_button)
 
         header_layout.addLayout(buttons_layout)
@@ -248,15 +213,11 @@ class TranscriptViewWidget(QWidget):
 
         # Audio player
         self.player_frame = QFrame()
-        self.player_frame.setStyleSheet(f"""
-            QFrame {{
-                background-color: {BG_SURFACE_2};
-                border-radius: {RADIUS_LG}px;
-            }}
-        """)
+        self.player_frame.setObjectName("playerCard")
+        self.player_frame.setStyleSheet(_card_style("playerCard"))
         self.player_frame.setVisible(False)
         player_layout = QHBoxLayout(self.player_frame)
-        player_layout.setContentsMargins(12, 8, 12, 8)
+        player_layout.setContentsMargins(12, 10, 18, 10)
         player_layout.setSpacing(12)
 
         # Play button
@@ -266,12 +227,16 @@ class TranscriptViewWidget(QWidget):
         self.play_button.setStyleSheet(f"""
             QPushButton {{
                 background-color: {ACCENT_PRIMARY};
-                color: #ffffff;
+                color: {TEXT_ON_ACCENT};
                 border-radius: {RADIUS_ROUND}px;
-                font-size: 16px;
+                font-size: 15px;
                 border: none;
+                padding: 0;
+                min-width: 40px; max-width: 40px;
+                min-height: 40px; max-height: 40px;
             }}
             QPushButton:hover {{ background-color: {ACCENT_PRIMARY_HOVER}; }}
+            QPushButton:pressed {{ background-color: {ACCENT_PRIMARY_PRESSED}; }}
         """)
         self.play_button.clicked.connect(self._toggle_playback)
         player_layout.addWidget(self.play_button)
@@ -284,19 +249,20 @@ class TranscriptViewWidget(QWidget):
         # Progress slider
         slider_style = f"""
             QSlider::groove:horizontal {{
-                background: {BG_SURFACE_3};
+                background: {BG_SURFACE_4};
                 height: 4px;
                 border-radius: 2px;
             }}
             QSlider::handle:horizontal {{
-                background: {TEXT_PRIMARY};
-                width: 12px;
-                height: 12px;
-                margin: -4px 0;
-                border-radius: 6px;
+                background: {ACCENT_PRIMARY};
+                border: 2px solid {BG_SURFACE_1};
+                width: 10px;
+                height: 10px;
+                margin: -5px 0;
+                border-radius: 7px;
             }}
             QSlider::handle:horizontal:hover {{
-                background: #ffffff;
+                background: {ACCENT_PRIMARY_HOVER};
             }}
             QSlider::sub-page:horizontal {{
                 background: {ACCENT_PRIMARY};
@@ -318,7 +284,7 @@ class TranscriptViewWidget(QWidget):
 
         # Volume
         volume_label = QLabel("🔊")
-        volume_label.setStyleSheet("font-size: 14px; background: transparent;")
+        volume_label.setStyleSheet(f"font-size: 13px; color: {TEXT_SECONDARY}; background: transparent;")
         player_layout.addWidget(volume_label)
 
         self.volume_slider = QSlider(Qt.Orientation.Horizontal)
@@ -327,7 +293,7 @@ class TranscriptViewWidget(QWidget):
         self.volume_slider.setFixedWidth(80)
         self.volume_slider.setStyleSheet(f"""
             QSlider::groove:horizontal {{
-                background: {BG_SURFACE_3};
+                background: {BG_SURFACE_4};
                 height: 4px;
                 border-radius: 2px;
             }}
@@ -358,7 +324,8 @@ class TranscriptViewWidget(QWidget):
         # === Transcript tab ===
         self.transcript_tab = QWidget()
         transcript_layout = QVBoxLayout(self.transcript_tab)
-        transcript_layout.setContentsMargins(0, 8, 0, 0)
+        transcript_layout.setContentsMargins(0, 10, 0, 0)
+        transcript_layout.setSpacing(10)
 
         # Search bar
         search_layout = QHBoxLayout()
@@ -369,7 +336,7 @@ class TranscriptViewWidget(QWidget):
         search_layout.addWidget(self.search_input)
 
         self.search_count_label = QLabel("")
-        self.search_count_label.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 11px;")
+        self.search_count_label.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 12px; padding-left: 4px;")
         search_layout.addWidget(self.search_count_label)
 
         transcript_layout.addLayout(search_layout)
@@ -383,9 +350,9 @@ class TranscriptViewWidget(QWidget):
             QTextBrowser {{
                 background-color: {BG_SURFACE_1};
                 color: {TEXT_PRIMARY};
-                border: none;
+                border: 1px solid {BORDER_SUBTLE};
                 border-radius: {RADIUS_LG}px;
-                padding: 16px;
+                padding: 14px 18px;
                 font-size: 14px;
             }}
         """)
@@ -396,7 +363,8 @@ class TranscriptViewWidget(QWidget):
         # === Summary tab ===
         self.summary_tab = QWidget()
         summary_layout = QVBoxLayout(self.summary_tab)
-        summary_layout.setContentsMargins(0, 8, 0, 0)
+        summary_layout.setContentsMargins(0, 10, 0, 0)
+        summary_layout.setSpacing(10)
 
         summary_toolbar = QHBoxLayout()
         summary_toolbar.setContentsMargins(0, 0, 0, 0)
@@ -419,11 +387,16 @@ class TranscriptViewWidget(QWidget):
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(f"QScrollArea {{ background-color: transparent; border: none; }}")
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background-color: transparent; border: none; }")
+        scroll.viewport().setAutoFillBackground(False)
 
         summary_content = QWidget()
+        summary_content.setObjectName("summaryContent")
+        summary_content.setStyleSheet("QWidget#summaryContent { background: transparent; }")
         summary_content_layout = QVBoxLayout(summary_content)
-        summary_content_layout.setSpacing(16)
+        summary_content_layout.setContentsMargins(0, 0, 4, 0)
+        summary_content_layout.setSpacing(12)
 
         metrics_row = QHBoxLayout()
         metrics_row.setSpacing(12)
@@ -483,35 +456,41 @@ class TranscriptViewWidget(QWidget):
         # === Info tab ===
         self.info_tab = QWidget()
         info_layout = QVBoxLayout(self.info_tab)
-        info_layout.setContentsMargins(12, 12, 12, 12)
+        info_layout.setContentsMargins(0, 10, 0, 0)
+
+        info_card = QFrame()
+        info_card.setObjectName("infoCard")
+        info_card.setStyleSheet(_card_style("infoCard"))
+        info_card_layout = QVBoxLayout(info_card)
+        info_card_layout.setContentsMargins(22, 18, 22, 18)
 
         self.info_text = QLabel()
         self.info_text.setWordWrap(True)
         self.info_text.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.info_text.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 13px;")
-        info_layout.addWidget(self.info_text)
+        self.info_text.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 13px; background: transparent;")
+        self.info_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        info_card_layout.addWidget(self.info_text)
+        info_layout.addWidget(info_card)
         info_layout.addStretch()
 
         self.tab_widget.addTab(self.info_tab, tr("Информация"))
         self.tab_widget.currentChanged.connect(self._on_tab_changed)
 
-    def _create_section(self, title: str, accent: str = ACCENT_SECONDARY) -> QFrame:
+    def _create_section(self, title: str, accent: str = TEXT_TERTIARY) -> QFrame:
         frame = QFrame()
         frame.setObjectName("summarySectionCard")
-        frame.setStyleSheet(f"""
-            QFrame#summarySectionCard {{
-                background-color: {BG_SURFACE_2};
-                border-radius: {RADIUS_LG}px;
-            }}
-        """)
+        frame.setStyleSheet(_card_style("summarySectionCard"))
 
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setContentsMargins(22, 16, 22, 18)
         layout.setSpacing(8)
 
-        title_label = QLabel(title)
+        title_label = QLabel(
+            f'<span style="color: {accent};">\u25CF</span>&nbsp;&nbsp;{html.escape(title)}'
+        )
+        title_label.setTextFormat(Qt.TextFormat.RichText)
         title_label.setStyleSheet(f"""
-            font-size: 15px; font-weight: 600; color: {accent};
+            font-size: 15px; font-weight: 600; color: {TEXT_PRIMARY};
             background: transparent;
         """)
         layout.addWidget(title_label)
@@ -523,24 +502,25 @@ class TranscriptViewWidget(QWidget):
         frame.setObjectName("summaryMetricCard")
         frame.setStyleSheet(f"""
             QFrame#summaryMetricCard {{
-                background-color: {BG_SURFACE_2};
+                background-color: {tint(accent, 0.07)};
                 border-radius: {RADIUS_LG}px;
-                border: 1px solid {BORDER_SUBTLE};
+                border: 1px solid {_hex_to_rgba(accent, 40)};
             }}
         """)
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(18, 14, 18, 14)
-        layout.setSpacing(2)
+        layout.setContentsMargins(20, 14, 20, 14)
+        layout.setSpacing(0)
 
         value_label = QLabel("0")
         value_label.setStyleSheet(
-            f"font-size: 26px; font-weight: 700; color: {accent}; background: transparent;"
+            f"font-size: 28px; font-weight: 700; color: {readable_on_surface(accent)}; "
+            f"background: transparent;"
         )
         layout.addWidget(value_label)
 
         title_label = QLabel(title)
         title_label.setStyleSheet(
-            f"font-size: 12px; color: {TEXT_SECONDARY}; background: transparent;"
+            f"font-size: 12px; font-weight: 500; color: {TEXT_SECONDARY}; background: transparent;"
         )
         layout.addWidget(title_label)
         return frame, value_label
@@ -692,7 +672,7 @@ class TranscriptViewWidget(QWidget):
                 segment_text = html.escape(seg.text)
                 timestamp_link = (
                     f'<a href="timestamp:{seg.start_time}" '
-                    f'style="color: {ACCENT_SECONDARY}; text-decoration: none; font-size: 11px; '
+                    f'style="color: {ACCENT_PRIMARY}; text-decoration: none; font-size: 11px; '
                     f'font-family: {FONT_MONO};">{timestamp_display}</a>'
                 )
 
@@ -863,8 +843,8 @@ class TranscriptViewWidget(QWidget):
         cursor.setCharFormat(plain_format)
 
         highlight_format = QTextCharFormat()
-        highlight_format.setBackground(QColor("#FFD54F"))
-        highlight_format.setForeground(QColor("#000"))
+        highlight_format.setBackground(QColor(HIGHLIGHT_BG))
+        highlight_format.setForeground(QColor(HIGHLIGHT_FG))
 
         cursor.movePosition(cursor.MoveOperation.Start)
         count = 0
@@ -888,11 +868,11 @@ class TranscriptViewWidget(QWidget):
             self.copy_button.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {STATUS_SUCCESS};
-                    border: none;
+                    border: 1px solid {STATUS_SUCCESS};
                     border-radius: {RADIUS_MD}px;
-                    padding: 8px 16px;
+                    padding: 7px 16px;
                     font-size: 13px;
-                    color: #ffffff;
+                    color: {TEXT_ON_ACCENT};
                     font-weight: 600;
                 }}
             """)
@@ -1209,3 +1189,14 @@ class TranscriptViewWidget(QWidget):
         )
         self._delete_missing_button.clicked.connect(self._delete_missing_callback)
         self._delete_missing_button.setVisible(True)
+
+
+def _card_style(object_name: str) -> str:
+    """White rounded card with a hairline border, scoped to one object name."""
+    return f"""
+        QFrame#{object_name} {{
+            background-color: {BG_SURFACE_1};
+            border: 1px solid {BORDER_SUBTLE};
+            border-radius: {RADIUS_LG}px;
+        }}
+    """

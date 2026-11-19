@@ -23,16 +23,15 @@ from PySide6.QtWidgets import (
 from src.ui.i18n import SUPPORTED_LANGUAGES, tr
 from src.ui.settings_dialog import AudioTestWorker, describe_audio_sources
 from src.ui.theme import (
-    ACCENT_PRIMARY,
-    ACCENT_PRIMARY_HOVER,
     BG_SURFACE_1,
-    BG_SURFACE_2,
-    BORDER_DEFAULT,
+    BORDER_SUBTLE,
     RADIUS_LG,
     RADIUS_MD,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
     TEXT_TERTIARY,
+    primary_button_style,
+    secondary_button_style,
 )
 from src.utils.config import get_settings, reload_settings, save_env_settings
 from src.utils.security import (
@@ -304,7 +303,7 @@ class OnboardingDialog(QDialog):
         card = QFrame()
         card.setObjectName("onboardingCard")
         card.setStyleSheet(
-            f"QFrame#onboardingCard {{ background-color: {BG_SURFACE_2}; border: 1px solid {BORDER_DEFAULT}; "
+            f"QFrame#onboardingCard {{ background-color: {BG_SURFACE_1}; border: 1px solid {BORDER_SUBTLE}; "
             f"border-radius: {RADIUS_LG}px; }}"
             "QFrame#onboardingCard QLabel, QFrame#onboardingCard QCheckBox "
             "{ background: transparent; border: none; }"
@@ -453,24 +452,12 @@ class OnboardingDialog(QDialog):
 
     @staticmethod
     def _primary_button_style() -> str:
-        return f"""
-            QPushButton {{
-                background-color: {ACCENT_PRIMARY}; color: #ffffff; border: none;
-                border-radius: {RADIUS_MD}px; padding: 10px 20px;
-                font-size: 13px; font-weight: 600;
-            }}
-            QPushButton:hover {{ background-color: {ACCENT_PRIMARY_HOVER}; }}
-            QPushButton:disabled {{ background-color: {BG_SURFACE_1}; color: {TEXT_TERTIARY}; }}
-        """
+        return primary_button_style(radius=RADIUS_MD, padding="9px 22px") + (
+            "QPushButton { font-size: 13px; }"
+        )
 
     @staticmethod
     def _secondary_button_style() -> str:
-        return f"""
-            QPushButton {{
-                background-color: transparent; color: {TEXT_SECONDARY};
-                border: 1px solid {BORDER_DEFAULT}; border-radius: {RADIUS_MD}px;
-                padding: 9px 16px; font-size: 13px;
-            }}
-            QPushButton:hover {{ color: {TEXT_PRIMARY}; background-color: {BG_SURFACE_2}; }}
-            QPushButton:disabled {{ color: {TEXT_TERTIARY}; }}
-        """
+        return secondary_button_style(radius=RADIUS_MD, padding="9px 16px") + (
+            "QPushButton { font-size: 13px; }"
+        )

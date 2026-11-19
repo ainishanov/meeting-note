@@ -25,15 +25,15 @@ from PySide6.QtWidgets import (
 from src import __version__
 from src.ui.i18n import tr
 from src.ui.theme import (
-    ACCENT_PRIMARY,
-    ACCENT_PRIMARY_HOVER,
-    BG_SURFACE_2,
-    BORDER_DEFAULT,
+    BG_SURFACE_1,
+    BORDER_SUBTLE,
     RADIUS_LG,
     RADIUS_MD,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
     TEXT_TERTIARY,
+    primary_button_style,
+    secondary_button_style,
 )
 from src.utils.telemetry import capture_exception, track_event
 
@@ -149,8 +149,8 @@ class FeedbackDialog(QDialog):
         form = QFrame()
         form.setObjectName("feedbackForm")
         form.setStyleSheet(
-            f"QFrame#feedbackForm {{ background-color: {BG_SURFACE_2}; "
-            f"border: 1px solid {BORDER_DEFAULT}; border-radius: {RADIUS_LG}px; }}"
+            f"QFrame#feedbackForm {{ background-color: {BG_SURFACE_1}; "
+            f"border: 1px solid {BORDER_SUBTLE}; border-radius: {RADIUS_LG}px; }}"
         )
         form_layout = QVBoxLayout(form)
         form_layout.setContentsMargins(18, 16, 18, 16)
@@ -185,14 +185,15 @@ class FeedbackDialog(QDialog):
         self.fallback_button.clicked.connect(
             lambda: self._open_route(FEEDBACK_FORM_URL)
         )
+        self.fallback_button.setStyleSheet(
+            secondary_button_style(radius=RADIUS_MD, padding="9px 16px")
+        )
         actions.addWidget(self.fallback_button)
         actions.addStretch()
         self.submit_button = QPushButton(tr("Отправить отзыв"))
         self.submit_button.clicked.connect(self._submit)
         self.submit_button.setStyleSheet(
-            f"QPushButton {{ background-color: {ACCENT_PRIMARY}; color: #ffffff; "
-            f"border-radius: {RADIUS_MD}px; padding: 10px 18px; font-weight: 600; }}"
-            f"QPushButton:hover {{ background-color: {ACCENT_PRIMARY_HOVER}; }}"
+            primary_button_style(radius=RADIUS_MD, padding="9px 20px")
         )
         actions.addWidget(self.submit_button)
         form_layout.addLayout(actions)

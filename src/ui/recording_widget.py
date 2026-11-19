@@ -12,13 +12,19 @@ from PySide6.QtWidgets import (
 )
 
 from src.ui.theme import (
-    ACCENT_PRIMARY, ACCENT_PRIMARY_HOVER, ACCENT_PRIMARY_PRESSED,
     ACCENT_SECONDARY,
-    BG_SURFACE_2, BG_SURFACE_3,
+    BG_SURFACE_1, BG_SURFACE_3,
+    BORDER_STRONG, BORDER_SUBTLE,
     FONT_MONO,
     RADIUS_LG, RADIUS_MD,
     STATUS_RECORDING, STATUS_PAUSED, STATUS_SUCCESS,
-    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY,
+    TEXT_PRIMARY, TEXT_SECONDARY,
+    _hex_to_rgba,
+    danger_button_style,
+    primary_button_style,
+    readable_on_surface,
+    secondary_button_style,
+    tint,
 )
 from src.ui.i18n import tr
 
@@ -29,7 +35,7 @@ class RecordingIndicator(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(14, 14)
-        self._color = QColor(TEXT_TERTIARY)
+        self._color = QColor(BORDER_STRONG)
         self._opacity = 1.0
 
         self._pulse_timer = QTimer(self)
@@ -47,7 +53,7 @@ class RecordingIndicator(QWidget):
             self._pulse_timer.stop()
             self._opacity = 1.0
         else:
-            self._color = QColor(TEXT_TERTIARY)
+            self._color = QColor(BORDER_STRONG)
             self._pulse_timer.stop()
             self._opacity = 1.0
         self.update()
@@ -137,16 +143,16 @@ class RecordingWidget(QWidget):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 8)
+        layout.setContentsMargins(0, 0, 0, 0)
 
         # Recording frame
         self.frame = QFrame()
         self.frame.setObjectName("recordingFrame")
-        self.frame.setMinimumHeight(76)
+        self.frame.setMinimumHeight(80)
         self._set_frame_style()
 
         frame_layout = QHBoxLayout(self.frame)
-        frame_layout.setContentsMargins(16, 11, 14, 11)
+        frame_layout.setContentsMargins(20, 14, 16, 14)
         frame_layout.setSpacing(14)
 
         self.indicator = RecordingIndicator()
@@ -156,15 +162,12 @@ class RecordingWidget(QWidget):
         status_column.setSpacing(3)
 
         self.status_label = QLabel(tr("Готов к записи"))
-        self.status_label.setStyleSheet(f"""
-            font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY};
-            background: transparent;
-        """)
+        self._set_status_color(TEXT_PRIMARY)
         status_column.addWidget(self.status_label)
 
         self.context_label = QLabel(tr("Системный звук и микрофон"))
         self.context_label.setStyleSheet(
-            f"font-size: 12px; color: {TEXT_TERTIARY}; background: transparent;"
+            f"font-size: 12px; color: {TEXT_SECONDARY}; background: transparent;"
         )
         status_column.addWidget(self.context_label)
 
@@ -176,21 +179,21 @@ class RecordingWidget(QWidget):
 
         self.duration_label = QLabel("00:00:00")
         self.duration_label.setStyleSheet(f"""
-            font-size: 16px; font-family: {FONT_MONO}; color: {TEXT_SECONDARY};
-            background: transparent;
+            font-size: 18px; font-family: {FONT_MONO}; font-weight: 600;
+            color: {TEXT_PRIMARY}; background: transparent; padding-right: 6px;
         """)
         self.duration_label.hide()
         frame_layout.addWidget(self.duration_label)
 
         self.main_button = QPushButton(tr("Записать встречу"))
-        self.main_button.setMinimumSize(170, 40)
+        self.main_button.setMinimumSize(176, 42)
         self.main_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.main_button.clicked.connect(self._on_main_button_clicked)
         self._update_main_button_style("start")
         frame_layout.addWidget(self.main_button)
 
         self.stop_button = QPushButton(tr("Остановить"))
-        self.stop_button.setMinimumSize(112, 40)
+        self.stop_button.setMinimumSize(116, 42)
         self.stop_button.setEnabled(False)
         self.stop_button.hide()
         self.stop_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -201,40 +204,31 @@ class RecordingWidget(QWidget):
         layout.addWidget(self.frame)
 
     def _set_frame_style(self, accent: str | None = None) -> None:
-        border = accent or "transparent"
+        """White card at rest; a soft tint and coloured edge for live states."""
+        if accent:
+            background = tint(accent, 0.06)
+            border = _hex_to_rgba(accent, 120)
+        else:
+            background = BG_SURFACE_1
+            border = BORDER_SUBTLE
         self.frame.setStyleSheet(f"""
             QFrame#recordingFrame {{
-                background-color: {BG_SURFACE_2};
+                background-color: {background};
                 border-radius: {RADIUS_LG}px;
                 border: 1px solid {border};
             }}
         """)
 
+    def _set_status_color(self, color: str) -> None:
+        self.status_label.setStyleSheet(
+            f"font-size: 15px; font-weight: 600; color: {color}; background: transparent;"
+        )
+
     def _apply_stop_button_style(self):
-        self.stop_button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {STATUS_RECORDING};
-                border: 1px solid {STATUS_RECORDING};
-                border-radius: {RADIUS_MD}px;
-                font-size: 13px;
-                font-weight: 600;
-                padding: 8px 20px;
-            }}
-            QPushButton:hover {{
-                background-color: {STATUS_RECORDING};
-                color: #ffffff;
-            }}
-            QPushButton:pressed {{
-                background-color: #e05555;
-                color: #ffffff;
-            }}
-            QPushButton:disabled {{
-                background-color: transparent;
-                color: {TEXT_TERTIARY};
-                border: 1px solid {TEXT_TERTIARY};
-            }}
-        """)
+        self.stop_button.setStyleSheet(
+            danger_button_style(radius=RADIUS_MD, padding="8px 20px")
+            + "QPushButton { font-size: 13px; }"
+        )
 
     def _setup_timer(self):
         self._timer = QTimer(self)
@@ -244,29 +238,13 @@ class RecordingWidget(QWidget):
         self._detection_timer.timeout.connect(self._clear_detected_meeting)
 
     def _update_main_button_style(self, mode: str):
-        styles = {
-            "start": (ACCENT_PRIMARY, ACCENT_PRIMARY_HOVER, ACCENT_PRIMARY_PRESSED, "#ffffff"),
-            "pause": (STATUS_PAUSED, "#ffe066", "#f0c030", TEXT_TERTIARY),
-            "resume": (ACCENT_SECONDARY, "#33d6d1", "#00b5b0", TEXT_TERTIARY),
-        }
-        bg, hover, pressed, fg = styles.get(mode, styles["start"])
-        self.main_button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {bg};
-                color: {fg};
-                border: none;
-                border-radius: {RADIUS_MD}px;
-                font-size: 14px;
-                font-weight: 600;
-                padding: 8px 24px;
-            }}
-            QPushButton:hover {{ background-color: {hover}; }}
-            QPushButton:pressed {{ background-color: {pressed}; }}
-            QPushButton:disabled {{
-                background-color: {BG_SURFACE_3};
-                color: {TEXT_TERTIARY};
-            }}
-        """)
+        """Start/resume are the accent call to action; pause stays quiet."""
+        padding = "8px 24px"
+        if mode == "pause":
+            style = secondary_button_style(radius=RADIUS_MD, padding=padding)
+        else:
+            style = primary_button_style(radius=RADIUS_MD, padding=padding)
+        self.main_button.setStyleSheet(style + "QPushButton { font-size: 14px; }")
 
     def _on_main_button_clicked(self):
         state_value = _state_value(self._recording_state)
@@ -287,7 +265,7 @@ class RecordingWidget(QWidget):
             self._clear_detected_meeting(reset_ui=False)
             self.status_label.setText(tr("Подготовка аудио..."))
             self.context_label.setText(tr("Проверяем аудиоустройства"))
-            self.status_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_SECONDARY}; background: transparent;")
+            self._set_status_color(TEXT_SECONDARY)
             self.main_button.setText(tr("Подготовка..."))
             self.main_button.setEnabled(False)
             self.stop_button.setEnabled(False)
@@ -302,7 +280,7 @@ class RecordingWidget(QWidget):
             self._audio_source = None
             self.status_label.setText(tr("Готов к записи"))
             self.context_label.setText(tr("Системный звук и микрофон"))
-            self.status_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
+            self._set_status_color(TEXT_PRIMARY)
             self.main_button.setText(tr("Записать встречу"))
             self.main_button.setEnabled(True)
             self._update_main_button_style("start")
@@ -321,7 +299,7 @@ class RecordingWidget(QWidget):
             self.context_label.setText(
                 self._audio_source_text() or tr("Системный звук и микрофон записываются")
             )
-            self.status_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {STATUS_RECORDING}; background: transparent;")
+            self._set_status_color(readable_on_surface(STATUS_RECORDING))
             self.main_button.setText(tr("Пауза"))
             self.main_button.setEnabled(True)
             self._update_main_button_style("pause")
@@ -337,7 +315,7 @@ class RecordingWidget(QWidget):
             self._clear_detected_meeting(reset_ui=False)
             self.status_label.setText(tr("Пауза"))
             self.context_label.setText(tr("Запись приостановлена"))
-            self.status_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {STATUS_PAUSED}; background: transparent;")
+            self._set_status_color(readable_on_surface(STATUS_PAUSED))
             self.main_button.setText(tr("Продолжить"))
             self.main_button.setEnabled(True)
             self._update_main_button_style("resume")
@@ -366,6 +344,7 @@ class RecordingWidget(QWidget):
 
         self._detected_app = _friendly_meeting_app(app_name)
         self.status_label.setText(tr("Обнаружен созвон"))
+        self._set_status_color(readable_on_surface(ACCENT_SECONDARY))
         self.context_label.setText(self._detected_app)
         self.main_button.setText(tr("Записать этот созвон"))
         self._set_frame_style(ACCENT_SECONDARY)
@@ -376,6 +355,7 @@ class RecordingWidget(QWidget):
         self._detected_app = ""
         if reset_ui and _state_value(self._recording_state) == "idle":
             self.status_label.setText(tr("Готов к записи"))
+            self._set_status_color(TEXT_PRIMARY)
             self.context_label.setText(tr("Системный звук и микрофон"))
             self.main_button.setText(tr("Записать встречу"))
             self._set_frame_style()
